@@ -1,0 +1,89 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name='iris_vlp16'>
+    <!-- Include the base Iris quadrotor -->
+    <include>
+      <uri>model://iris</uri>
+    </include>
+
+    <!-- Velodyne VLP-16 Link -->
+    <link name="velodyne_link">
+      <!-- Positioned 12cm above the drone center -->
+      <pose>0 0 0.12 0 0 0</pose>
+      <inertial>
+        <mass>0.83</mass>
+        <inertia>
+          <ixx>0.000908</ixx>
+          <iyy>0.000908</iyy>
+          <izz>0.001104</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      
+      <!-- Visual representation -->
+      <visual name="velodyne_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.0516</radius>
+            <length>0.0717</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/DarkGrey</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+        </material>
+      </visual>
+
+      <!-- The exact GPU LiDAR Plugin you just verified -->
+      <sensor type="gpu_ray" name="velodyne-VLP16">
+        <pose>0 0 0 0 0 0</pose>
+        <visualize>false</visualize>
+        <update_rate>10</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>1800</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.14159265359</min_angle>
+              <max_angle>3.14159265359</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>16</samples>
+              <resolution>1</resolution>
+              <min_angle>-0.261799</min_angle>
+              <max_angle>0.261799</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.9</min>
+            <max>130.0</max>
+            <resolution>0.001</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.008</stddev>
+          </noise>
+        </ray>
+        
+        <plugin name="gazebo_ros_laser_controller" filename="libgazebo_ros_velodyne_gpu_laser.so">
+          <topicName>/velodyne_points</topicName>
+          <frameName>velodyne_link</frameName>
+          <min_range>0.9</min_range>
+          <max_range>130.0</max_range>
+          <gaussianNoise>0.008</gaussianNoise>
+        </plugin>
+      </sensor>
+    </link>
+
+    <!-- Fixed joint locking the LiDAR to the Iris base_link -->
+    <joint name="velodyne_joint" type="fixed">
+      <parent>iris::base_link</parent>
+      <child>velodyne_link</child>
+    </joint>
+  </model>
+</sdf>
