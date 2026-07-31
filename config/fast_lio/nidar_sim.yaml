@@ -1,0 +1,34 @@
+common:
+    lid_topic:  "/velodyne_points"
+    imu_topic:  "/mavros/imu/data"
+    time_sync_en: false         # Set to false for simulation environments
+    time_offset_lidar_to_imu: 0.0
+
+preprocess:
+    lidar_type: 2                # 2 is the flag for Velodyne LiDARs
+    scan_line: 16                # VLP-16 has 16 rings
+    scan_rate: 10                # 10Hz rotation speed
+    timestamp_unit: 1
+    blind: 0.9                   # Ignore points closer than 0.9m (matches SDF)
+
+mapping:
+    acc_cov: 0.1
+    gyr_cov: 0.1
+    b_acc_cov: 0.0001
+    b_gyr_cov: 0.0001
+    fov_degree: 360
+    det_range: 130.0
+    extrinsic_est_en: false      # We know the exact physical distance
+    extrinsic_T: [0.0, 0.0, 0.22]
+    extrinsic_R: [1, 0, 0,
+                  0, 1, 0,
+                  0, 0, 1]
+
+publish:
+    path_en:  true
+    scan_publish_en:  true
+    dense_publish_en: true
+    scan_bodyframe_pub_en: true
+
+pcd_save:
+    pcd_save_en: false

@@ -1,24 +1,14 @@
-# ROS
+# Ignore ROS compilation and environment files
 catkin_ws/build/
 catkin_ws/devel/
 catkin_ws/logs/
+catkin_ws/.catkin_tools/
+catkin_ws/.catkin_workspace
 
-# PX4 build output
-simulation/PX4-Autopilot-v1.14.3/build/
+# Ignore the massive PX4 firmware repository
+simulation/PX4-Autopilot*/
 
-# Gazebo logs
-*.log
-
-# VS Code
-.vscode/
-
-# JetBrains
-.idea/
-
-# Python
-__pycache__/
-*.pyc
-
-# Linux
+# Ignore hidden system files
 .DS_Store
-Thumbs.db
+*.swp
+*.swo
