@@ -1,0 +1,57 @@
+<launch>
+  <!-- Workspace bounds and initial setpoints -->
+  <arg name="map_size_x" default="50.0"/>
+  <arg name="map_size_y" default="50.0"/>
+  <arg name="map_size_z" default="10.0"/>
+
+  <arg name="init_x" default="0.0"/>
+  <arg name="init_y" default="0.0"/>
+  <arg name="init_z" default="1.5"/> 
+
+  <arg name="odom_topic" default="/Fast_LIO/odometry"/>
+  <arg name="cloud_topic" default="/cloud_registered"/>
+  <arg name="sensor_pose_topic" default="/mavros/vision_pose/pose"/>
+
+  <!-- NIDAR Exploration Manager & FIESTA Mapping -->
+  <include file="$(find exploration_manager)/launch/algorithm.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+
+    <!-- Bounded exploration box tailored for indoor warehouse environment -->
+    <arg name="box_min_x" value="-15.0"/>
+    <arg name="box_min_y" value="-15.0"/>
+    <arg name="box_min_z" value="0.2"/>
+    <arg name="box_max_x" value="15.0"/>
+    <arg name="box_max_y" value="15.0"/>
+    <arg name="box_max_z" value="3.5"/>
+
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+    <arg name="sensor_pose_topic" value="$(arg sensor_pose_topic)"/>
+    <arg name="depth_topic" value="/unused_depth"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+
+    <arg name="cx" value="321.04638671875"/>
+    <arg name="cy" value="243.44969177246094"/>
+    <arg name="fx" value="387.229248046875"/>
+    <arg name="fy" value="387.229248046875"/>
+
+    <!-- Enforce Phase 4 safety constraints -->
+    <arg name="max_vel" value="1.0"/>
+    <arg name="max_acc" value="0.3"/>
+  </include>
+
+  <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->
+  <param name="exploration_node/map_ros/frame_id" value="camera_init"/>
+
+  <!-- FUEL B-Spline Trajectory Server -->
+  <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">
+    <remap from="/position_cmd" to="/planning/pos_cmd"/>
+    <remap from="/odom_world" to="$(arg odom_topic)"/>
+    <param name="traj_server/time_forward" value="1.5" type="double"/>
+    <param name="traj_server/pub_traj_id" value="4" type="int"/>
+    <param name="traj_server/init_x" value="$(arg init_x)" type="double"/>
+    <param name="traj_server/init_y" value="$(arg init_y)" type="double"/>
+    <param name="traj_server/init_z" value="$(arg init_z)" type="double"/>
+  </node>
+</launch>

@@ -12,7 +12,7 @@ sim_sleep() {
 }
 
 source /home/developer/NIDAR/scripts/setup_env.sh
-roslaunch px4 mavros_posix_sitl.launch vehicle:=iris_vlp16 gui:=$GUI_ARG interactive:=false > /tmp/sim_test.log 2>&1 &
+roslaunch px4 mavros_posix_sitl.launch vehicle:=iris_vlp16 world:=/home/developer/NIDAR/simulation/PX4-Autopilot-v1.14.3/Tools/simulation/gazebo-classic/sitl_gazebo-classic/worlds/warehouse.world gui:=$GUI_ARG interactive:=false > /tmp/sim_test.log 2>&1 &
 SIM_PID=$!
 
 echo "Waiting for MAVROS to connect to PX4 (up to 60 seconds)..."
@@ -121,5 +121,35 @@ done
 echo "Current Drone Altitude (Z position):"
 rostopic echo /mavros/local_position/pose -n 1 | grep -A 3 "position:"
 
-echo "Cleaning up..."
-killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true
+echo "============================================================"
+echo "Starting FUEL MAVROS Offboard Control Bridge..."
+echo "============================================================"
+python3 /home/developer/NIDAR/scripts/fuel_to_mavros_bridge.py > /tmp/bridge.log 2>&1 &
+BRIDGE_PID=$!
+sim_sleep 2
+
+echo "Switching MAVROS to OFFBOARD Mode..."
+rosrun mavros mavsys mode -c OFFBOARD
+sim_sleep 2
+
+echo "============================================================"
+echo "Launching FUEL Autonomous Exploration Stack..."
+echo "============================================================"
+roslaunch /home/developer/NIDAR/launch/nidar_fuel.launch > /tmp/fuel.log 2>&1 &
+FUEL_PID=$!
+sim_sleep 3
+
+echo "============================================================"
+echo "Autonomous Exploration Live! Monitoring Flight Telemetry..."
+echo "============================================================"
+for i in {1..30}; do
+    VEL=$(rostopic echo /mavros/local_position/velocity_local -n 1 2>/dev/null | grep -A 3 "linear:" | grep "x:" | awk '{print $2}')
+    POS=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | tr '\n' ' ')
+    if [ ! -z "$VEL" ]; then
+        echo "[Telemetry @ t+${i}s] Velocity X: ${VEL} m/s | Pose: ${POS}"
+    fi
+    sim_sleep 2
+done
+
+echo "Simulation test complete. Terminating nodes cleanly..."
+killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink traj_server exploration_node 2>/dev/null || true
