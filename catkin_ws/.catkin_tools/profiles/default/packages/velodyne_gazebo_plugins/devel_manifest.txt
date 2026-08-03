@@ -1,4 +1,4 @@
-velodyne_simulator_ros1/velodyne_gazebo_plugins
+velodyne_simulator/velodyne_gazebo_plugins
 /home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/libgazebo_ros_velodyne_gpu_laser.so /home/developer/NIDAR/catkin_ws/devel/lib/libgazebo_ros_velodyne_gpu_laser.so
 /home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/libgazebo_ros_velodyne_laser.so /home/developer/NIDAR/catkin_ws/devel/lib/libgazebo_ros_velodyne_laser.so
 /home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/pkgconfig/velodyne_gazebo_plugins.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/velodyne_gazebo_plugins.pc

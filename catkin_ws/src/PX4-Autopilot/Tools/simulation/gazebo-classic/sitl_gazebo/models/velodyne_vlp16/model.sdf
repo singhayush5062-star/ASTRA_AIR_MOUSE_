@@ -1,0 +1,177 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+
+  <model name="velodyne_vlp16">
+
+    <static>false</static>
+
+    <link name="velodyne_link">
+
+      <!-- ========================= -->
+      <!-- Inertia -->
+      <!-- ========================= -->
+      <inertial>
+        <pose>0 0 0.0377 0 0 0</pose>
+
+        <!-- Lightweight for SITL -->
+        <mass>0.01</mass>
+
+        <inertia>
+          <ixx>1e-5</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+
+          <iyy>1e-5</iyy>
+          <iyz>0</iyz>
+
+          <izz>1e-5</izz>
+        </inertia>
+      </inertial>
+
+      <!-- ========================= -->
+      <!-- Visuals -->
+      <!-- ========================= -->
+
+      <visual name="base_visual_1">
+        <pose>0 0 0 0 0 0</pose>
+
+        <geometry>
+          <mesh>
+            <uri>model://velodyne_vlp16/meshes/VLP16_base_1.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <visual name="base_visual_2">
+        <pose>0 0 0 0 0 0</pose>
+
+        <geometry>
+          <mesh>
+            <uri>model://velodyne_vlp16/meshes/VLP16_base_2.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <visual name="scan_visual">
+        <pose>0 0 0 0 0 0</pose>
+
+        <geometry>
+          <mesh>
+            <uri>model://velodyne_vlp16/meshes/VLP16_scan.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- ========================= -->
+      <!-- Collision -->
+      <!-- ========================= -->
+
+      <collision name="base_collision">
+
+        <pose>0 0 0.03585 0 0 0</pose>
+
+        <geometry>
+
+          <cylinder>
+
+            <radius>0.0516</radius>
+
+            <length>0.0717</length>
+
+          </cylinder>
+
+        </geometry>
+
+      </collision>
+
+      <!-- ========================= -->
+      <!-- VLP-16 GPU LiDAR -->
+      <!-- ========================= -->
+
+      <sensor name="vlp16" type="gpu_ray">
+
+        <pose>0 0 0.0377 0 0 0</pose>
+
+        <visualize>false</visualize>
+
+        <always_on>true</always_on>
+
+        <update_rate>10</update_rate>
+
+        <ray>
+
+          <scan>
+
+            <horizontal>
+
+              <samples>1875</samples>
+
+              <resolution>1</resolution>
+
+              <min_angle>-3.141592653589793</min_angle>
+
+              <max_angle>3.141592653589793</max_angle>
+
+            </horizontal>
+
+            <vertical>
+
+              <samples>16</samples>
+
+              <resolution>1</resolution>
+
+              <min_angle>-0.2617993877991494</min_angle>
+
+              <max_angle>0.2617993877991494</max_angle>
+
+            </vertical>
+
+          </scan>
+
+          <range>
+
+            <min>0.3</min>
+
+            <max>131.0</max>
+
+            <resolution>0.001</resolution>
+
+          </range>
+
+          <noise>
+
+            <type>gaussian</type>
+
+            <mean>0.0</mean>
+
+            <stddev>0.0</stddev>
+
+          </noise>
+
+        </ray>
+
+        <plugin
+            name="gazebo_ros_velodyne"
+            filename="libgazebo_ros_velodyne_gpu_laser.so">
+
+          <topicName>/velodyne_points</topicName>
+
+          <frameName>velodyne_link</frameName>
+
+          <organize_cloud>false</organize_cloud>
+
+          <min_range>0.9</min_range>
+
+          <max_range>130.0</max_range>
+
+          <gaussianNoise>0.008</gaussianNoise>
+
+        </plugin>
+
+      </sensor>
+
+    </link>
+
+  </model>
+
+</sdf>

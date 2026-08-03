@@ -1,14 +1,22 @@
-# Ignore ROS compilation and environment files
-catkin_ws/build/
-catkin_ws/devel/
-catkin_ws/logs/
+# Build directories and binary outputs
+**/build/
+**/devel/
+**/logs/
+**/*.log
+**/*.o
+**/*.so
+**/*.a
 catkin_ws/.catkin_tools/
 catkin_ws/.catkin_workspace
 
-# Ignore the massive PX4 firmware repository
-simulation/PX4-Autopilot*/
-
-# Ignore hidden system files
+# Hidden system and temporary editor files
 .DS_Store
 *.swp
 *.swo
+*~
+__pycache__/
+*.pyc
+*.pyo
+*.tmp
+.gitignore_container
+Makefile_px4

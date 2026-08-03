@@ -1,1 +1,1 @@
-velodyne_simulator_ros1/velodyne_simulator
+velodyne_simulator/velodyne_simulator
