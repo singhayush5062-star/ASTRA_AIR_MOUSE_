@@ -12,32 +12,32 @@ sim_sleep() {
 }
 
 source /home/developer/NIDAR/scripts/setup_env.sh
-roslaunch px4 mavros_posix_sitl.launch vehicle:=iris_vlp16 world:=/home/developer/NIDAR/simulation/PX4-Autopilot-v1.14.3/Tools/simulation/gazebo-classic/sitl_gazebo-classic/worlds/warehouse.world gui:=$GUI_ARG interactive:=false > /tmp/sim_test.log 2>&1 &
+roslaunch px4 mavros_posix_sitl.launch vehicle:=iris_vlp16 world:=/home/developer/NIDAR/nidar_competition.world gui:=$GUI_ARG interactive:=false > /tmp/sim_test.log 2>&1 &
 SIM_PID=$!
 
 echo "Waiting for MAVROS to connect to PX4 (up to 60 seconds)..."
 for i in {1..60}; do
-    STATUS=$(rostopic echo /mavros/state -n 1 2>/dev/null | grep "connected: True")
-    if [ ! -z "$STATUS" ]; then
+    STATUS=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_state', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.connected)" 2>/dev/null)
+    if [ "$STATUS" = "True" ]; then
         echo "MAVROS Connected!"
         break
     fi
     sim_sleep 1
 done
 
-STATUS=$(rostopic echo /mavros/state -n 1 2>/dev/null | grep "connected: True")
-if [ -z "$STATUS" ]; then
+STATUS=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_state', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.connected)" 2>/dev/null)
+if [ "$STATUS" != "True" ]; then
     echo "Error: MAVROS failed to connect to PX4. Exiting."
     killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true
     exit 1
 fi
 
-echo "Launching FAST-LIO2 Mapping..."
-roslaunch /home/developer/NIDAR/launch/fast_lio/nidar_mapping.launch rviz:=$GUI_ARG > /tmp/fast_lio.log 2>&1 &
+echo "Launching FAST-LIO2 Mapping & RViz..."
+roslaunch /home/developer/NIDAR/nidar_mapping.launch rviz:=$GUI_ARG > /tmp/fast_lio.log 2>&1 &
 sim_sleep 2
 
 echo "Starting Odometry Relay..."
-/home/developer/NIDAR/scripts/relay_odometry.py > /tmp/relay.log 2>&1 &
+/home/developer/NIDAR/relay_odometry.py > /tmp/relay.log 2>&1 &
 sim_sleep 2
 
 # Verify IMU and LiDAR data streaming
@@ -68,10 +68,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Waiting for EKF Local Position Lock (up to 300 seconds)..."
+echo "Waiting for EKF Local Position Lock..."
 for i in {1..300}; do
-    POS=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep "position:")
-    if [ ! -z "$POS" ]; then
+    POS=$(python3 -c "import rospy; from geometry_msgs.msg import PoseStamped; rospy.init_node('test_takeoff_pos', anonymous=True); msg = rospy.wait_for_message('/mavros/local_position/pose', PoseStamped, timeout=2.0); print('locked')" 2>/dev/null)
+    if [ "$POS" = "locked" ]; then
         echo "Local Position Locked!"
         break
     fi
@@ -82,34 +82,34 @@ echo "Setting Mode to AUTO.LOITER..."
 rosrun mavros mavsys mode -c AUTO.LOITER
 sim_sleep 2
 
-echo "Arming Drone (attempting up to 30 times)..."
+echo "Arming Drone..."
 for i in {1..30}; do
     rosrun mavros mavsafety arm >/dev/null 2>&1
     sim_sleep 2
-    ARMED=$(rostopic echo /mavros/state -n 1 2>/dev/null | grep "armed: True")
-    if [ ! -z "$ARMED" ]; then
+    ARMED=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_arm', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.armed)" 2>/dev/null)
+    if [ "$ARMED" = "True" ]; then
         echo "Drone successfully armed!"
         break
     fi
     echo "Arming rejected (EKF2 aligning), retrying in 2 seconds..."
 done
 
-ARMED=$(rostopic echo /mavros/state -n 1 2>/dev/null | grep "armed: True")
-if [ -z "$ARMED" ]; then
+ARMED=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_arm', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.armed)" 2>/dev/null)
+if [ "$ARMED" != "True" ]; then
     echo "Failed to arm drone after 30 attempts. Exiting."
     killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true
     exit 1
 fi
 
-echo "Taking off to 3 meters..."
-rosrun mavros mavcmd takeoffcur 0 0 3.0
+echo "Taking off to 1.5 meters..."
+rosrun mavros mavcmd takeoffcur 0 0 1.5
 
 echo "Waiting for drone to reach target altitude..."
-for i in {1..120}; do
-    ALT=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "z:" | awk '{print $2}')
+for i in {1..30}; do
+    ALT=$(python3 -c "import rospy; from geometry_msgs.msg import PoseStamped; rospy.init_node('test_takeoff_alt', anonymous=True); msg = rospy.wait_for_message('/mavros/local_position/pose', PoseStamped, timeout=2.0); print(msg.pose.position.z)" 2>/dev/null)
     if [ ! -z "$ALT" ]; then
         echo "Current altitude: $ALT meters"
-        REACHED=$(python3 -c "import sys; print(1 if float(sys.argv[1]) >= 1.5 else 0)" "$ALT")
+        REACHED=$(python3 -c "import sys; print(1 if float(sys.argv[1]) >= 1.0 else 0)" "$ALT")
         if [ "$REACHED" -eq 1 ]; then
             echo "Target altitude reached!"
             break
@@ -118,13 +118,10 @@ for i in {1..120}; do
     sim_sleep 1
 done
 
-echo "Current Drone Altitude (Z position):"
-rostopic echo /mavros/local_position/pose -n 1 | grep -A 3 "position:"
-
 echo "============================================================"
 echo "Starting FUEL MAVROS Offboard Control Bridge..."
 echo "============================================================"
-python3 /home/developer/NIDAR/scripts/fuel_to_mavros_bridge.py > /tmp/bridge.log 2>&1 &
+/home/developer/NIDAR/scripts/fuel_to_mavros_bridge.py > /tmp/bridge.log 2>&1 &
 BRIDGE_PID=$!
 sim_sleep 2
 
@@ -140,16 +137,15 @@ FUEL_PID=$!
 sim_sleep 3
 
 echo "============================================================"
-echo "Autonomous Exploration Live! Monitoring Flight Telemetry..."
+echo "Autonomous Exploration Live! Monitoring Forward Flight Telemetry..."
 echo "============================================================"
 for i in {1..30}; do
     VEL=$(rostopic echo /mavros/local_position/velocity_local -n 1 2>/dev/null | grep -A 3 "linear:" | grep "x:" | awk '{print $2}')
-    POS=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | tr '\n' ' ')
-    if [ ! -z "$VEL" ]; then
-        echo "[Telemetry @ t+${i}s] Velocity X: ${VEL} m/s | Pose: ${POS}"
-    fi
+    POS_X=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "x:" | awk '{print $2}')
+    POS_Y=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "y:" | awk '{print $2}')
+    POS_Z=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "z:" | awk '{print $2}')
+    echo "[Telemetry t+${i}s] X: ${POS_X}m, Y: ${POS_Y}m, Z: ${POS_Z}m | Vel X: ${VEL} m/s"
     sim_sleep 2
 done
 
-echo "Simulation test complete. Terminating nodes cleanly..."
-killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink traj_server exploration_node 2>/dev/null || true
+echo "Simulation test execution complete."

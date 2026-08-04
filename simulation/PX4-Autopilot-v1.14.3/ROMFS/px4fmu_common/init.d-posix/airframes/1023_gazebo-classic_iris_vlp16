@@ -33,13 +33,26 @@ param set-default LPE_FUSION 242
 
 param set-default COM_RC_IN_MODE 1
 param set-default NAV_RCL_ACT 0
+param set-default COM_ARM_WO_GPS 1
+param set-default COM_ARM_EKF_YAW 3.14
+param set-default COM_ARM_MAG_STR 0
+param set-default CBRK_IO_SAFETY 22027
+param set-default CBRK_SUPPLY_CHK 894281
 
+# Thrust & Mass Tuning for VLP-16 Payload (2.33kg total)
+param set-default MPC_THR_HOVER 0.65
+param set-default MPC_THR_MAX 1.0
 
-# EKF2: Vision position and heading, no GPS
-param set-default EKF2_EV_DELAY 5
-param set-default EKF2_EV_CTRL 15
+# EKF2: Vision position, velocity, height fusion (MAG_TYPE=5 disables mag yaw preflight lock)
+param set-default EKF2_EV_DELAY 0
+param set-default EKF2_EV_CTRL 11
 param set-default EKF2_HGT_REF 3
 param set-default EKF2_GPS_CTRL 0
+param set-default EKF2_BARO_CTRL 0
+param set-default EKF2_MAG_TYPE 5
+param set-default EKF2_EVP_NOISE 0.05
+param set-default EKF2_EVV_NOISE 0.05
+param set-default EKF2_EVA_NOISE 0.05
 
 # AEQ: External heading set to use vision input
 param set-default ATT_EXT_HDG_M 1

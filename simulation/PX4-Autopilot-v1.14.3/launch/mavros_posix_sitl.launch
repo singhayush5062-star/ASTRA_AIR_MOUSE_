@@ -1,7 +1,6 @@
 <?xml version="1.0"?>
 <launch>
     <!-- MAVROS posix SITL environment launch script -->
-    <!-- launches MAVROS, PX4 SITL, Gazebo environment, and spawns vehicle -->
     <!-- vehicle pose -->
     <arg name="x" default="0"/>
     <arg name="y" default="0"/>
@@ -22,7 +21,7 @@
     <arg name="paused" default="false"/>
     <arg name="respawn_gazebo" default="false"/>
     <!-- MAVROS configs -->
-    <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
+    <arg name="fcu_url" default="udp://:14540@"/>
     <arg name="respawn_mavros" default="false"/>
     <!-- PX4 configs -->
     <arg name="interactive" default="true"/>
@@ -51,4 +50,7 @@
         <arg name="fcu_url" value="$(arg fcu_url)"/>
         <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
     </include>
+    <param name="/mavros/conn/timeout" value="60.0"/>
+    <param name="/mavros/conn/heartbeat_rate" value="1.0"/>
+    <rosparam param="/mavros/plugin_blacklist">['sys_time', 'timesync']</rosparam>
 </launch>

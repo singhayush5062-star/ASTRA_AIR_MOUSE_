@@ -1,14 +1,14 @@
 <?xml version="1.0" ?>
-<sdf version="1.5">
+<sdf version="1.6">
   <model name="iris_vlp16">
-    <!-- Include the base Iris quadrotor -->
+    <!-- Include base Iris quadrotor with full motor controllers and mavlink_interface -->
     <include>
       <uri>model://iris</uri>
     </include>
 
-    <!-- Velodyne VLP-16 Link -->
+    <!-- Velodyne VLP-16 LiDAR Link -->
     <link name="velodyne_link">
-      <pose>0 0 0.08 0 0</pose>
+      <pose>0 0 0.08 0 0 0</pose>
       <inertial>
         <mass>0.83</mass>
         <inertia>
@@ -56,7 +56,7 @@
             </vertical>
           </scan>
           <range>
-            <min>0.9</min>
+            <min>0.1</min>
             <max>130.0</max>
             <resolution>0.001</resolution>
           </range>
@@ -70,93 +70,17 @@
         <plugin name="gazebo_ros_laser_controller" filename="libgazebo_ros_velodyne_laser.so">
           <topicName>/velodyne_points</topicName>
           <frameName>velodyne_link</frameName>
-          <min_range>0.9</min_range>
+          <min_range>0.1</min_range>
           <max_range>130.0</max_range>
           <gaussianNoise>0.008</gaussianNoise>
         </plugin>
       </sensor>
-
-      <sensor name="imu_sensor" type="imu">
-        <always_on>true</always_on>
-        <update_rate>100</update_rate>
-        <visualize>false</visualize>
-        <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
-          <topicName>/imu</topicName>
-          <bodyName>iris_vlp16::velodyne_link</bodyName>
-          <updateRateHZ>100.0</updateRateHZ>
-          <gaussianNoise>0.0</gaussianNoise>
-          <xyzOffset>0 0 0</xyzOffset>
-          <rpyOffset>0 0 0</rpyOffset>
-          <frameName>base_link</frameName>
-          <initialOrientationAsReference>false</initialOrientationAsReference>
-        </plugin>
-        <pose>0 0 0 0 0 0</pose>
-      </sensor>
-
     </link>
 
+    <!-- Attach velodyne_link to iris::base_link -->
     <joint name="velodyne_joint" type="fixed">
       <parent>iris::base_link</parent>
       <child>velodyne_link</child>
     </joint>
-  
-    <plugin name="mavlink_interface" filename="libgazebo_mavlink_interface.so">
-      <robotNamespace/>
-      <imuSubTopic>/imu</imuSubTopic>
-      <magSubTopic>/mag</magSubTopic>
-      <baroSubTopic>/baro</baroSubTopic>
-      <mavlink_addr>INADDR_ANY</mavlink_addr>
-      <mavlink_tcp_port>4560</mavlink_tcp_port>
-      <mavlink_udp_port>14560</mavlink_udp_port>
-      <serialEnabled>0</serialEnabled>
-      <serialDevice>/dev/ttyACM0</serialDevice>
-      <baudRate>921600</baudRate>
-      <qgc_addr>INADDR_ANY</qgc_addr>
-      <qgc_udp_port>14550</qgc_udp_port>
-      <sdk_addr>INADDR_ANY</sdk_addr>
-      <sdk_udp_port>14540</sdk_udp_port>
-      <hil_mode>0</hil_mode>
-      <hil_state_level>0</hil_state_level>
-      <send_vision_estimation>0</send_vision_estimation>
-      <send_odometry>1</send_odometry>
-      <enable_lockstep>1</enable_lockstep>
-      <use_tcp>1</use_tcp>
-      <motorSpeedCommandPubTopic>/gazebo/command/motor_speed</motorSpeedCommandPubTopic>
-      <control_channels>
-        <channel name="rotor1">
-          <input_index>0</input_index>
-          <input_offset>0</input_offset>
-          <input_scaling>1000</input_scaling>
-          <zero_position_disarmed>0</zero_position_disarmed>
-          <zero_position_armed>100</zero_position_armed>
-          <joint_control_type>velocity</joint_control_type>
-        </channel>
-        <channel name="rotor2">
-          <input_index>1</input_index>
-          <input_offset>0</input_offset>
-          <input_scaling>1000</input_scaling>
-          <zero_position_disarmed>0</zero_position_disarmed>
-          <zero_position_armed>100</zero_position_armed>
-          <joint_control_type>velocity</joint_control_type>
-        </channel>
-        <channel name="rotor3">
-          <input_index>2</input_index>
-          <input_offset>0</input_offset>
-          <input_scaling>1000</input_scaling>
-          <zero_position_disarmed>0</zero_position_disarmed>
-          <zero_position_armed>100</zero_position_armed>
-          <joint_control_type>velocity</joint_control_type>
-        </channel>
-        <channel name="rotor4">
-          <input_index>3</input_index>
-          <input_offset>0</input_offset>
-          <input_scaling>1000</input_scaling>
-          <zero_position_disarmed>0</zero_position_disarmed>
-          <zero_position_armed>100</zero_position_armed>
-          <joint_control_type>velocity</joint_control_type>
-        </channel>
-      </control_channels>
-    </plugin>
-
   </model>
 </sdf>

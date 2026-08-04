@@ -917,6 +917,10 @@ int main(int argc, char** argv)
                         pointBodyToWorld(&(feats_down_body->points[i]), &(feats_down_world->points[i]));
                     }
                     ikdtree.Build(feats_down_world->points);
+                    ROS_WARN("Built tree with %d points. Sample points:", feats_down_size);
+                    for (int i = 0; i < min(5, (int)feats_down_size); i++) {
+                        ROS_WARN("Tree pt %d: [%f, %f, %f]", i, feats_down_world->points[i].x, feats_down_world->points[i].y, feats_down_world->points[i].z);
+                    }
                 }
                 continue;
             }

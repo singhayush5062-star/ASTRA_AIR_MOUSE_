@@ -6,7 +6,9 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /PointCloud21
+        - /RegisteredCloud1
+        - /RawLiDAR1
+        - /FlightPath1
       Splitter Ratio: 0.5
   - Class: rviz/Selection
     Name: Selection
@@ -29,7 +31,7 @@ Visualization Manager:
       Color: 160; 160; 160
       Enabled: true
       Line Style:
-        Line Width: 0.029999999329447746
+        Line Width: 0.03
         Value: Lines
       Name: Grid
       Normal Cell Count: 0
@@ -48,31 +50,68 @@ Visualization Manager:
       Class: rviz/PointCloud2
       Color: 255; 255; 255
       Color Transformer: AxisColor
-      Decay Time: 0
+      Decay Time: 30
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: PointCloud2
+      Name: RegisteredCloud
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.05
       Style: Points
+      Topic: /cloud_registered
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.8
+      Autocompute Intensity Bounds: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 0; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0.5
+      Enabled: true
+      Invert Rainbow: false
+      Name: RawLiDAR
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.03
+      Style: Points
       Topic: /velodyne_points
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Class: rviz/Odometry
+      Angle Distance: 0.1
+      Axis Length: 0.5
+      Axis Radius: 0.05
+      Class: rviz/Odometry
+      Color: 255; 0; 0
+      Enabled: true
+      Keep: 100
+      Length: 0.3
+      Name: DroneOdometry
+      Position Tolerance: 0.1
+      Queue Size: 10
+      Shape: Axes
+      Topic: /Fast_LIO/odometry
       Value: true
     - Class: rviz/TF
       Enabled: true
       Frame Timeout: 15
       Frames:
         All Frames Enabled: true
-      Marker Scale: 1
+      Marker Scale: 0.5
       Name: TF
       Show Arrows: true
       Show Axes: true
@@ -113,13 +152,13 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10
+      Distance: 12
       Focal Point:
         X: 0
         Y: 0
-        Z: 0
+        Z: 1
       Name: Current
-      Pitch: 0.5
+      Pitch: 0.6
       Yaw: 0.8
       Value: Orbit (rviz)
 Window Geometry:

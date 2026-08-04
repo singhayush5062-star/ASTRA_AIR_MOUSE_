@@ -345,31 +345,7 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
         if (!given_offset_time)
         {
-          double yaw_angle = atan2(added_pt.y, added_pt.x) * 57.2957;
-          if (is_first[layer])
-          {
-            // printf("layer: %d; is first: %d", layer, is_first[layer]);
-              yaw_fp[layer]=yaw_angle;
-              is_first[layer]=false;
-              added_pt.curvature = 0.0;
-              yaw_last[layer]=yaw_angle;
-              time_last[layer]=added_pt.curvature;
-              continue;
-          }
-
-          if (yaw_angle <= yaw_fp[layer])
-          {
-            added_pt.curvature = (yaw_fp[layer]-yaw_angle) / omega_l;
-          }
-          else
-          {
-            added_pt.curvature = (yaw_fp[layer]-yaw_angle+360.0) / omega_l;
-          }
-
-          if (added_pt.curvature < time_last[layer])  added_pt.curvature+=360.0/omega_l;
-
-          yaw_last[layer] = yaw_angle;
-          time_last[layer]=added_pt.curvature;
+          added_pt.curvature = (double)i / plsize * (1000.0 / SCAN_RATE);
         }
 
         pl_buff[layer].points.push_back(added_pt);
@@ -414,34 +390,7 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
         if (!given_offset_time)
         {
-          int layer = pl_orig.points[i].ring;
-          double yaw_angle = atan2(added_pt.y, added_pt.x) * 57.2957;
-
-          if (is_first[layer])
-          {
-            // printf("layer: %d; is first: %d", layer, is_first[layer]);
-              yaw_fp[layer]=yaw_angle;
-              is_first[layer]=false;
-              added_pt.curvature = 0.0;
-              yaw_last[layer]=yaw_angle;
-              time_last[layer]=added_pt.curvature;
-              continue;
-          }
-
-          // compute offset time
-          if (yaw_angle <= yaw_fp[layer])
-          {
-            added_pt.curvature = (yaw_fp[layer]-yaw_angle) / omega_l;
-          }
-          else
-          {
-            added_pt.curvature = (yaw_fp[layer]-yaw_angle+360.0) / omega_l;
-          }
-
-          if (added_pt.curvature < time_last[layer])  added_pt.curvature+=360.0/omega_l;
-
-          yaw_last[layer] = yaw_angle;
-          time_last[layer]=added_pt.curvature;
+          added_pt.curvature = (double)i / plsize * (1000.0 / SCAN_RATE);
         }
 
         if (i % point_filter_num == 0)
