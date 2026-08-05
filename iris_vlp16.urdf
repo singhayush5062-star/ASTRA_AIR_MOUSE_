@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<robot name="iris_vlp16">
+  <!-- Base Link (Drone Body) -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/developer/NIDAR/simulation/PX4-Autopilot-v1.14.3/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/iris_vlp16/iris/meshes/iris.stl" scale="1 1 1"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- LiDAR Link -->
+  <link name="velodyne_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.07"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.1 0.1 0.8 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Joint connecting them (Z offset matching SDF height 0.08) -->
+  <joint name="velodyne_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="velodyne_link"/>
+    <origin xyz="0 0 0.08" rpy="0 0 0"/>
+  </joint>
+</robot>

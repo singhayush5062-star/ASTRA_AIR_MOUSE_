@@ -1,0 +1,65 @@
+. RViz Configuration Files
+RViz visualization setups are saved in .rviz files. Based on your project structure, here are the main files you can edit or load to change what is visualized (e.g., PointClouds, TF frames, Paths, Odom):
+
+Main Custom Config: /home/ayush/Desktop/NIDAR/config/nidar_lidar.rviz
+FAST_LIO Config: /home/ayush/Desktop/NIDAR/catkin_ws/src/FAST_LIO/rviz_cfg/loam_livox.rviz
+FUEL Planner Configs:
+/home/ayush/Desktop/NIDAR/catkin_ws/src/fuel/fuel_planner/plan_manage/config/exp.rviz
+/home/ayush/Desktop/NIDAR/catkin_ws/src/fuel/fuel_planner/plan_manage/config/traj.rviz
+You can open any of these directly in RViz (e.g., rviz -d config/nidar_lidar.rviz), modify the displays in the GUI, and hit File -> Save Config to update them.
+
+2. Strategy to Reduce Script Execution Time
+Looking at /home/ayush/Desktop/NIDAR/scripts/robust_square_flight.py, there are several programmatic bottlenecks we can optimize to make the drone fly the trajectory significantly faster:
+
+A. Eliminate or Reduce Waypoint Hover Time
+
+Current: Lines 142-146 force the drone to hover in place for 1.5 seconds at every single waypoint (hover_end = rospy.Time.now() + rospy.Duration(1.5)).
+Optimization: Reduce this to 0.2 seconds or remove it entirely. This alone will shave off ~5-6 seconds from the flight time.
+B. Increase Waypoint Acceptance Radius (Corner Cutting)
+
+Current: Line 132 checks if the drone is within 0.45 meters of the waypoint before moving to the next one (if dist < 0.45:).
+Optimization: Increase this threshold to 0.8 or 1.0. The drone will transition to the next leg of the square sooner, maintaining its momentum and rounding the corners instead of coming to a near-stop at each vertex.
+C. Reduce Pre-flight Delays
+
+Current: Line 74 pre-streams 50 setpoints at 20Hz to satisfy PX4's OFFBOARD requirements. This takes exactly 2.5 seconds.
+Optimization: PX4 usually only requires about 10-20 setpoints to accept OFFBOARD mode. We can reduce the loop from range(50) to range(20), saving 1.5 seconds before takeoff.
+Current: Lines 94 and 100 wait 1.5 seconds between retrying Arm and OFFBOARD commands.
+Optimization: Reduce the retry cooldown from rospy.Duration(1.5) to rospy.Duration(0.5).
+D. Increase Physical Drone Speed (Advanced) Currently, the script only publishes PoseStamped (target positions). The actual speed is dictated by PX4's internal parameters. To make the drone physically fly faster between points, you can:
+
+Update PX4 Parameters: Change MPC_XY_CRUISE and MPC_XY_VEL_MAX to higher values in your PX4 configuration or via MAVROS parameter setting calls.
+Use Velocity Setpoints: Instead of just sending positions, you could rewrite the loop to publish velocity vectors (geometry_msgs/TwistStamped to /mavros/setpoint_velocity/cmd_vel) pointing towards the next waypoint, giving you explicit programmatic control over the drone's speed.
+Let me know if you would like me to go ahead and implement these speed optimizations into the robust_square_flight.py script!
+
+
+
+
+To increase the distance the drone keeps from obstacles, you need to tune the parameters in the FUEL Exploration Planner configuration file.
+
+The primary configuration file for this is: /home/ayush/Desktop/NIDAR/config/fuel/exploration_planner.yaml
+
+Here are the specific parameters you need to adjust:
+
+1. Obstacle Map Inflation (obstacles_inflation)
+Current Value: 0.20 (20 cm)
+What it does: This is the most direct way to keep the drone away from walls. It artificially "bloats" every obstacle in the 3D voxel map by this distance. If you set it to 0.40, the planner will act as if every wall and box is 40cm thicker than it actually is.
+Recommendation: Increase this to 0.40 or 0.50 to ensure the drone maintains a wider berth around all objects.
+2. Kinodynamic Minimum Clearance (d_min)
+Current Value: 0.25 (25 cm)
+What it does: This parameter dictates the strict minimum clearance distance used by the B-spline trajectory optimizer. When the planner generates a smooth flight path, it mathematically penalizes any path that comes closer than d_min to an inflated obstacle.
+Recommendation: Increase this to 0.40 or 0.50 to force the optimizer to push trajectories further toward the center of open spaces.
+3. Local Bound Inflate (local_bound_inflate)
+Current Value: 0.5
+What it does: This adds a safety buffer margin around the local sliding window map. It prevents the planner from generating paths that skim exactly along the edge of known vs. unknown space where unseen obstacles might lurk.
+Recommendation: You can leave this at 0.5, or bump it to 0.8 if you notice the drone clipping corners when turning into newly explored aisles.
+Summary of Changes to Apply
+Open /home/ayush/Desktop/NIDAR/config/fuel/exploration_planner.yaml and modify these lines:
+
+yaml
+sdf_map:
+  ...
+  obstacles_inflation: 0.50   # <-- Increase from 0.20 to 0.50
+exploration_planner:
+  ...
+  d_min: 0.50                 # <-- Increase from 0.25 to 0.50
+By changing these two parameters to 0.50, the drone will attempt to maintain a minimum clearance of half a meter from all obstacles while exploring the warehouse.

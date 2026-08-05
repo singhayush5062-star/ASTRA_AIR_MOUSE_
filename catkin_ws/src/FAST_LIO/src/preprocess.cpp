@@ -412,14 +412,17 @@ void Preprocess::sim_handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     int plsize = pl_orig.size();
     pl_surf.reserve(plsize);
     for (int i = 0; i < pl_orig.points.size(); i++) {
-        double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y +
-                       pl_orig.points[i].z * pl_orig.points[i].z;
+        double x = pl_orig.points[i].x;
+        double y = pl_orig.points[i].y;
+        double z = pl_orig.points[i].z;
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
+        double range = x * x + y * y + z * z;
         if (range < blind * blind) continue;
         Eigen::Vector3d pt_vec;
         PointType added_pt;
-        added_pt.x = pl_orig.points[i].x;
-        added_pt.y = pl_orig.points[i].y;
-        added_pt.z = pl_orig.points[i].z;
+        added_pt.x = x;
+        added_pt.y = y;
+        added_pt.z = z;
         added_pt.intensity = pl_orig.points[i].intensity;
         added_pt.normal_x = 0;
         added_pt.normal_y = 0;

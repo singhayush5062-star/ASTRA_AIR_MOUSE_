@@ -3,10 +3,11 @@
   <model name="nidar_arena">
     <static>true</static>
     <link name="link">
+      <pose>0 0 0 0 0 0</pose>
       <collision name="collision">
         <geometry>
           <mesh>
-            <uri>model://nidar_arena/meshes/nidar_world_arena.dae</uri>
+            <uri>model://nidar_arena/meshes/mapdraw.stl</uri>
             <scale>1 1 1</scale>
           </mesh>
         </geometry>
@@ -23,7 +24,7 @@
         <cast_shadows>false</cast_shadows>
         <geometry>
           <mesh>
-            <uri>model://nidar_arena/meshes/nidar_world_arena.dae</uri>
+            <uri>model://nidar_arena/meshes/mapdraw.stl</uri>
             <scale>1 1 1</scale>
           </mesh>
         </geometry>

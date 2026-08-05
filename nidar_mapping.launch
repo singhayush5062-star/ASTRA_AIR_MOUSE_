@@ -1,0 +1,38 @@
+<launch>
+    <!-- Launch file for FAST-LIO customized for NIDAR simulation -->
+    
+    <arg name="rviz" default="true" />
+
+    <rosparam command="load" file="/home/developer/NIDAR/config/fast_lio/nidar_sim.yaml" />
+
+    <!-- FAST-LIO Global parameters -->
+    <param name="feature_extract_enable" type="bool" value="0"/>
+    <param name="point_filter_num" type="int" value="4"/>
+    <param name="max_iteration" type="int" value="3" />
+    <param name="filter_size_surf" type="double" value="0.5" />
+    <param name="filter_size_map" type="double" value="0.5" />
+    <param name="cube_side_length" type="double" value="1000" />
+    <param name="runtime_pos_log_enable" type="bool" value="0" />
+
+    <!-- Load URDF -->
+    <param name="robot_description" textfile="/home/developer/NIDAR/config/iris_vlp16.urdf" />
+
+    <!-- Static Transform Publishers linking FAST-LIO body frame to URDF links -->
+    <node pkg="tf" type="static_transform_publisher" name="body_to_base_link" args="0 0 0 0 0 0 body base_link 10" />
+    <node pkg="tf" type="static_transform_publisher" name="base_link_to_velodyne_link" args="0 0 0.22 0 0 0 base_link velodyne_link 10" />
+    <node pkg="tf" type="static_transform_publisher" name="base_link_to_velodyne" args="0 0 0.22 0 0 0 base_link velodyne 10" />
+
+    <!-- Robot State Publisher -->
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="nidar_robot_state_publisher" output="screen" />
+
+    <!-- FAST-LIO node -->
+    <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen">
+        <remap from="/Odometry" to="/Fast_LIO/odometry" />
+    </node>
+
+    <!-- RViz -->
+    <group if="$(arg rviz)">
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d /home/developer/NIDAR/config/nidar_lidar.rviz" />
+    </group>
+
+</launch>

@@ -20,3 +20,16 @@ __pycache__/
 *.tmp
 .gitignore_container
 Makefile_px4
+
+# ROS bag recordings and temporary bags
+rosbags/
+*.bag
+*.bag.active
+
+# Host temp files
+host_test.txt
+
+# Root-level redundant FAST_LIO folder (active code is in catkin_ws/src/FAST_LIO)
+/FAST_LIO/
+
+
