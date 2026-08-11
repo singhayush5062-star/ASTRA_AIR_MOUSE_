@@ -107,6 +107,8 @@ void MapROS::updateESDFCallback(const ros::TimerEvent& /*event*/) {
   auto t1 = ros::Time::now();
 
   map_->updateESDF3d();
+  // Publish ESDF right after update so downstream consumers get fresh distances.
+  publishESDF();
   esdf_need_update_ = false;
 
   auto t2 = ros::Time::now();

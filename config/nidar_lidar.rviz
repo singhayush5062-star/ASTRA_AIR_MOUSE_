@@ -1,15 +1,18 @@
 Panels:
   - Class: rviz/Displays
-    Help Height: 78
+    Help Height: 220
     Name: Displays
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Status1
+        - /TF1
+        - /DroneOdometry1
         - /RegisteredCloud1
         - /RawLiDAR1
-        - /FlightPath1
-      Splitter Ratio: 0.5
+        - /ActualFlightPath1
+        - /PlannedTrajectory1
+        - /ExplorationFrontiers1
+      Splitter Ratio: 0.55
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -98,13 +101,55 @@ Visualization Manager:
       Class: rviz/Odometry
       Color: 255; 0; 0
       Enabled: true
-      Keep: 100
+      Keep: 600
       Length: 0.3
       Name: DroneOdometry
       Position Tolerance: 0.1
-      Queue Size: 10
+      Queue Size: 100
       Shape: Axes
       Topic: /Fast_LIO/odometry
+      Value: true
+    - Alpha: 1
+      Buffer Length: 15000
+      Class: rviz/Path
+      Color: 0; 170; 255
+      Enabled: true
+      Head Diameter: 0.2
+      Head Length: 0.2
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.05
+      Name: ActualFlightPath
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 0
+      Pose Style: None
+      Queue Size: 50
+      Radius: 0.03
+      Shaft Diameter: 0.1
+      Shaft Length: 0.1
+      Topic: /flight_path
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /planning/travel_traj
+      Name: PlannedTrajectory
+      Namespaces:
+        {}
+      Queue Size: 2000
+      Value: true
+    - Alpha: 0.9
+      Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /planning_vis/frontier
+      Name: ExplorationFrontiers
+      Namespaces:
+        {}
+      Queue Size: 2000
       Value: true
     - Class: rviz/TF
       Enabled: true
@@ -149,17 +194,27 @@ Visualization Manager:
     - Class: rviz/Select
     - Class: rviz/FocusCamera
     - Class: rviz/Measure
+    - Class: rviz/SetInitialPose
+      Theta std deviation: 0.2617993950843811
+      Topic: /initialpose
+      X std deviation: 0.5
+      Y std deviation: 0.5
+    - Class: rviz/SetGoal
+      Topic: /move_base_simple/goal
+    - Class: rviz/PublishPoint
+      Single click: true
+      Topic: /clicked_point
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 12
+      Distance: 16
       Focal Point:
-        X: 0
+        X: 1.5
         Y: 0
-        Z: 1
+        Z: 1.2
       Name: Current
-      Pitch: 0.6
-      Yaw: 0.8
+      Pitch: 0.45
+      Yaw: 0.7
       Value: Orbit (rviz)
 Window Geometry:
   Height: 800

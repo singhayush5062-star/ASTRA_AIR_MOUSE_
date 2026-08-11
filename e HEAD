@@ -1,0 +1,1742 @@
+[1mdiff --git a/catkin_ws/src/fuel/fuel_planner/active_perception/include/active_perception/perception_utils.h b/catkin_ws/src/fuel/fuel_planner/active_perception/include/active_perception/perception_utils.h[m
+[1mindex 343d56c4..6d74d6ab 100644[m
+[1m--- a/catkin_ws/src/fuel/fuel_planner/active_perception/include/active_perception/perception_utils.h[m
+[1m+++ b/catkin_ws/src/fuel/fuel_planner/active_perception/include/active_perception/perception_utils.h[m
+[36m@@ -41,6 +41,8 @@[m [mprivate:[m
+   double left_angle_, right_angle_, top_angle_, max_dist_, vis_dist_;[m
+   // Normal vectors of camera FOV planes in camera frame[m
+   Vector3d n_top_, n_bottom_, n_left_, n_right_;[m
+[32m+[m[32m  // Whether horizontal coverage is full (360 deg)[m
+[32m+[m[32m  bool full_horizontal_;[m
+   // Transform between camera and body[m
+   Eigen::Matrix4d T_cb_, T_bc_;[m
+   // FOV vertices in body frame[m
+[1mdiff --git a/catkin_ws/src/fuel/fuel_planner/active_perception/src/perception_utils.cpp b/catkin_ws/src/fuel/fuel_planner/active_perception/src/perception_utils.cpp[m
+[1mindex fc007a5d..97ae017d 100644[m
+[1m--- a/catkin_ws/src/fuel/fuel_planner/active_perception/src/perception_utils.cpp[m
+[1m+++ b/catkin_ws/src/fuel/fuel_planner/active_perception/src/perception_utils.cpp[m
+[36m@@ -10,6 +10,8 @@[m [mPerceptionUtils::PerceptionUtils(ros::NodeHandle& nh) {[m
+   nh.param("perception_utils/max_dist", max_dist_, -1.0);[m
+   nh.param("perception_utils/vis_dist", vis_dist_, -1.0);[m
+ [m
+[32m+[m[32m  full_horizontal_ = (left_angle_ >= M_PI - 1e-3 && right_angle_ >= M_PI - 1e-3);[m
+[32m+[m
+   n_top_ << 0.0, sin(M_PI_2 - top_angle_), cos(M_PI_2 - top_angle_);[m
+   n_bottom_ << 0.0, -sin(M_PI_2 - top_angle_), cos(M_PI_2 - top_angle_);[m
+ [m
+[36m@@ -86,8 +88,16 @@[m [mbool PerceptionUtils::insideFOV(const Vector3d& point) {[m
+   if (dir.norm() > max_dist_) return false;[m
+ [m
+   dir.normalize();[m
+[31m-  for (auto n : normals_) {[m
+[31m-    if (dir.dot(n) < 0.0) return false;[m
+[32m+[m[32m  // Always enforce top/bottom limits, but if horizontal coverage is full,[m
+[32m+[m[32m  // skip the left/right plane tests to avoid excluding valid LiDAR returns.[m
+[32m+[m[32m  // normals_ order: n_top_, n_bottom_, n_left_, n_right_[m
+[32m+[m[32m  if (normals_.size() >= 2) {[m
+[32m+[m[32m    if (dir.dot(normals_[0]) < 0.0) return false;[m
+[32m+[m[32m    if (dir.dot(normals_[1]) < 0.0) return false;[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (!full_horizontal_ && normals_.size() >= 4) {[m
+[32m+[m[32m    if (dir.dot(normals_[2]) < 0.0) return false;[m
+[32m+[m[32m    if (dir.dot(normals_[3]) < 0.0) return false;[m
+   }[m
+   return true;[m
+ }[m
+[36m@@ -95,9 +105,18 @@[m [mbool PerceptionUtils::insideFOV(const Vector3d& point) {[m
+ void PerceptionUtils::getFOVBoundingBox(Vector3d& bmin, Vector3d& bmax) {[m
+   double left = yaw_ + left_angle_;[m
+   double right = yaw_ - right_angle_;[m
+[31m-  Vector3d left_pt = pos_ + max_dist_ * Vector3d(cos(left), sin(left), 0);[m
+[31m-  Vector3d right_pt = pos_ + max_dist_ * Vector3d(cos(right), sin(right), 0);[m
+[31m-  vector<Vector3d> points = { left_pt, right_pt };[m
+[32m+[m[32m  vector<Vector3d> points;[m
+[32m+[m[32m  if (full_horizontal_) {[m
+[32m+[m[32m    // cover cardinal points for full horizontal FOV[m
+[32m+[m[32m    points.push_back(pos_ + max_dist_ * Vector3d(1, 0, 0));[m
+[32m+[m[32m    points.push_back(pos_ + max_dist_ * Vector3d(-1, 0, 0));[m
+[32m+[m[32m    points.push_back(pos_ + max_dist_ * Vector3d(0, 1, 0));[m
+[32m+[m[32m    points.push_back(pos_ + max_dist_ * Vector3d(0, -1, 0));[m
+[32m+[m[32m  } else {[m
+[32m+[m[32m    Vector3d left_pt = pos_ + max_dist_ * Vector3d(cos(left), sin(left), 0);[m
+[32m+[m[32m    Vector3d right_pt = pos_ + max_dist_ * Vector3d(cos(right), sin(right), 0);[m
+[32m+[m[32m    points = { left_pt, right_pt };[m
+[32m+[m[32m  }[m
+   if (left > 0 && right < 0)[m
+     points.push_back(pos_ + max_dist_ * Vector3d(1, 0, 0));[m
+   else if (left > M_PI_2 && right < M_PI_2)[m
+[1mdiff --git a/catkin_ws/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml b/catkin_ws/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml[m
+[1mindex aed45922..c66de3fe 100644[m
+[1m--- a/catkin_ws/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml[m
+[1m+++ b/catkin_ws/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml[m
+[36m@@ -73,7 +73,7 @@[m
+     <param name="map_ros/show_occ_time"  value="false"/>[m
+     <param name="map_ros/show_esdf_time" value="false"/>[m
+     <param name="map_ros/show_all_map" value="true"/>[m
+[31m-    <param name="map_ros/frame_id"      value="world"/>[m
+[32m+[m[32m    <param name="map_ros/frame_id"      value="camera_init"/>[m
+ [m
+     <!-- Fsm -->[m
+     <param name="fsm/thresh_replan1" value="0.5" type="double"/>[m
+[36m@@ -100,32 +100,32 @@[m
+     <param name="exploration/tsp_dir" value="$(find lkh_tsp_solver)/resource" type="string"/>[m
+     <param name="exploration/relax_time" value="1.0" type="double"/>[m
+ [m
+[31m-    <param name="frontier/cluster_min" value="100" type="int"/>[m
+[31m-    <param name="frontier/cluster_size_xy" value="2.0" type="double"/>[m
+[31m-    <param name="frontier/cluster_size_z" value="10.0" type="double"/>[m
+[31m-    <param name="frontier/min_candidate_dist" value="0.75" type="double"/>[m
+[31m-    <param name="frontier/min_candidate_clearance" value="0.21" type="double"/>[m
+[32m+[m[32m    <param name="frontier/cluster_min" value="10" type="int"/>[m
+[32m+[m[32m    <param name="frontier/cluster_size_xy" value="0.4" type="double"/>[m
+[32m+[m[32m    <param name="frontier/cluster_size_z" value="1.5" type="double"/>[m
+[32m+[m[32m    <param name="frontier/min_candidate_dist" value="0.3" type="double"/>[m
+[32m+[m[32m    <param name="frontier/min_candidate_clearance" value="0.15" type="double"/>[m
+     <param name="frontier/candidate_dphi" value="$(eval 15 * 3.1415926 / 180.0)" type="double"/>[m
+     <param name="frontier/candidate_rnum" value="3" type="int"/>[m
+[31m-    <param name="frontier/candidate_rmin" value="1.5" type="double"/>[m
+[32m+[m[32m    <param name="frontier/candidate_rmin" value="0.6" type="double"/>[m
+     <param name="frontier/candidate_rmax" value="2.5" type="double"/>[m
+[31m-    <param name="frontier/down_sample" value="3" type="int"/>;[m
+[31m-    <param name="frontier/min_visib_num" value="15" type="int"/>;[m
+[31m-    <param name="frontier/min_view_finish_fraction" value="0.2" type="double"/>;[m
+[32m+[m[32m    <param name="frontier/down_sample" value="2" type="int"/>[m
+[32m+[m[32m    <param name="frontier/min_visib_num" value="5" type="int"/>[m
+[32m+[m[32m    <param name="frontier/min_view_finish_fraction" value="0.2" type="double"/>[m
+ [m
+     <!-- Perception utils -->[m
+[31m-    <param name="perception_utils/top_angle" value="0.56125" type="double"/>;[m
+[31m-    <param name="perception_utils/left_angle" value="0.69222" type="double"/>;[m
+[31m-    <param name="perception_utils/right_angle" value="0.68901" type="double"/>;[m
+[31m-    <param name="perception_utils/max_dist" value="4.5" type="double"/>;[m
+[31m-    <param name="perception_utils/vis_dist" value="1.0" type="double"/>;[m
+[32m+[m[32m    <param name="perception_utils/top_angle" value="0.2618" type="double"/>[m
+[32m+[m[32m    <param name="perception_utils/left_angle" value="3.14159" type="double"/>[m
+[32m+[m[32m    <param name="perception_utils/right_angle" value="3.14159" type="double"/>[m
+[32m+[m[32m    <param name="perception_utils/max_dist" value="8.0" type="double"/>[m
+[32m+[m[32m    <param name="perception_utils/vis_dist" value="0.5" type="double"/>[m
+ [m
+ [m
+     <param name="heading_planner/yaw_diff" value="$(eval 30 * 3.1415926 / 180.0)" type="double"/>[m
+     <param name="heading_planner/half_vert_num" value="5" type="int"/>[m
+     <param name="heading_planner/lambda1" value="2.0" type="double"/>[m
+     <param name="heading_planner/lambda2" value="1.0" type="double"/>[m
+[31m-    <param name="heading_planner/max_yaw_rate" value="$(eval 10 * 3.1415926 / 180.0)" type="double"/>[m
+[32m+[m[32m    <param name="heading_planner/max_yaw_rate" value="$(eval 90 * 3.1415926 / 180.0)" type="double"/>[m
+     <param name="heading_planner/w" value="20000.0" type="double"/>[m
+     <param name="heading_planner/weight_type" value="1" type="double"/>[m
+ [m
+[1mdiff --git a/catkin_ws/src/fuel/fuel_planner/plan_env/src/map_ros.cpp b/catkin_ws/src/fuel/fuel_planner/plan_env/src/map_ros.cpp[m
+[1mindex 44de0425..062c4971 100644[m
+[1m--- a/catkin_ws/src/fuel/fuel_planner/plan_env/src/map_ros.cpp[m
+[1m+++ b/catkin_ws/src/fuel/fuel_planner/plan_env/src/map_ros.cpp[m
+[36m@@ -107,6 +107,8 @@[m [mvoid MapROS::updateESDFCallback(const ros::TimerEvent& /*event*/) {[m
+   auto t1 = ros::Time::now();[m
+ [m
+   map_->updateESDF3d();[m
+[32m+[m[32m  // Publish ESDF right after update so downstream consumers get fresh distances.[m
+[32m+[m[32m  publishESDF();[m
+   esdf_need_update_ = false;[m
+ [m
+   auto t2 = ros::Time::now();[m
+[1mdiff --git a/catkin_ws/src/fuel/fuel_planner/plan_manage/src/planner_manager.cpp b/catkin_ws/src/fuel/fuel_planner/plan_manage/src/planner_manager.cpp[m
+[1mindex aecf867c..2eb17afc 100644[m
+[1m--- a/catkin_ws/src/fuel/fuel_planner/plan_manage/src/planner_manager.cpp[m
+[1m+++ b/catkin_ws/src/fuel/fuel_planner/plan_manage/src/planner_manager.cpp[m
+[36m@@ -265,7 +265,12 @@[m [mbool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d& start_pt,[m
+ [m
+ void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d>& tour,[m
+     const Eigen::Vector3d& cur_vel, const Eigen::Vector3d& cur_acc, const double& time_lb) {[m
+[31m-  if (tour.empty()) ROS_ERROR("Empty path to traj planner");[m
+[32m+[m[32m  // Protect trajectory generation from invalid tours. A single-point tour can[m
+[32m+[m[32m  // trigger downstream matrix assertions in PolynomialTraj::waypointsTraj.[m
+[32m+[m[32m  if (tour.size() < 2) {[m
+[32m+[m[32m    ROS_WARN_THROTTLE(1.0, "planExploreTraj received short tour (size=%zu); keep previous trajectory", tour.size());[m
+[32m+[m[32m    return;[m
+[32m+[m[32m  }[m
+ [m
+   // Generate traj through waypoints-based method[m
+   const int pt_num = tour.size();[m
+[36m@@ -274,8 +279,12 @@[m [mvoid FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d>& tour,[m
+ [m
+   Eigen::Vector3d zero(0, 0, 0);[m
+   Eigen::VectorXd times(pt_num - 1);[m
+[31m-  for (int i = 0; i < pt_num - 1; ++i)[m
+[31m-    times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);[m
+[32m+[m[32m  for (int i = 0; i < pt_num - 1; ++i) {[m
+[32m+[m[32m    double dist = (pos.row(i + 1) - pos.row(i)).norm();[m
+[32m+[m[32m    // Keep segment duration strictly positive to avoid singular systems when[m
+[32m+[m[32m    // duplicated points appear in the exploration tour.[m
+[32m+[m[32m    times(i) = std::max(0.1, dist / (pp_.max_vel_ * 0.5));[m
+[32m+[m[32m  }[m
+ [m
+   PolynomialTraj init_traj;[m
+   PolynomialTraj::waypointsTraj(pos, cur_vel, zero, cur_acc, zero, times, init_traj);[m
+[1mdiff --git a/config/nidar_lidar.rviz b/config/nidar_lidar.rviz[m
+[1mindex fca19aec..71321a21 100644[m
+[1m--- a/config/nidar_lidar.rviz[m
+[1m+++ b/config/nidar_lidar.rviz[m
+[36m@@ -1,15 +1,18 @@[m
+ Panels:[m
+   - Class: rviz/Displays[m
+[31m-    Help Height: 78[m
+[32m+[m[32m    Help Height: 220[m
+     Name: Displays[m
+     Property Tree Widget:[m
+       Expanded:[m
+         - /Global Options1[m
+[31m-        - /Status1[m
+[32m+[m[32m        - /TF1[m
+[32m+[m[32m        - /DroneOdometry1[m
+         - /RegisteredCloud1[m
+         - /RawLiDAR1[m
+[31m-        - /FlightPath1[m
+[31m-      Splitter Ratio: 0.5[m
+[32m+[m[32m        - /ActualFlightPath1[m
+[32m+[m[32m        - /PlannedTrajectory1[m
+[32m+[m[32m        - /ExplorationFrontiers1[m
+[32m+[m[32m      Splitter Ratio: 0.55[m
+   - Class: rviz/Selection[m
+     Name: Selection[m
+   - Class: rviz/Tool Properties[m
+[36m@@ -98,14 +101,56 @@[m [mVisualization Manager:[m
+       Class: rviz/Odometry[m
+       Color: 255; 0; 0[m
+       Enabled: true[m
+[31m-      Keep: 100[m
+[32m+[m[32m      Keep: 600[m
+       Length: 0.3[m
+       Name: DroneOdometry[m
+       Position Tolerance: 0.1[m
+[31m-      Queue Size: 10[m
+[32m+[m[32m      Queue Size: 100[m
+       Shape: Axes[m
+       Topic: /Fast_LIO/odometry[m
+       Value: true[m
+[32m+[m[32m    - Alpha: 1[m
+[32m+[m[32m      Buffer Length: 15000[m
+[32m+[m[32m      Class: rviz/Path[m
+[32m+[m[32m      Color: 0; 170; 255[m
+[32m+[m[32m      Enabled: true[m
+[32m+[m[32m      Head Diameter: 0.2[m
+[32m+[m[32m      Head Length: 0.2[m
+[32m+[m[32m      Length: 0.3[m
+[32m+[m[32m      Line Style: Lines[m
+[32m+[m[32m      Line Width: 0.05[m
+[32m+[m[32m      Name: ActualFlightPath[m
+[32m+[m[32m      Offset:[m
+[32m+[m[32m        X: 0[m
+[32m+[m[32m        Y: 0[m
+[32m+[m[32m        Z: 0[m
+[32m+[m[32m      Pose Color: 255; 85; 0[m
+[32m+[m[32m      Pose Style: None[m
+[32m+[m[32m      Queue Size: 50[m
+[32m+[m[32m      Radius: 0.03[m
+[32m+[m[32m      Shaft Diameter: 0.1[m
+[32m+[m[32m      Shaft Length: 0.1[m
+[32m+[m[32m      Topic: /flight_path[m
+[32m+[m[32m      Unreliable: false[m
+[32m+[m[32m      Value: true[m
+[32m+[m[32m    - Alpha: 1[m
+[32m+[m[32m      Class: rviz/Marker[m
+[32m+[m[32m      Enabled: true[m
+[32m+[m[32m      Marker Topic: /planning/travel_traj[m
+[32m+[m[32m      Name: PlannedTrajectory[m
+[32m+[m[32m      Namespaces:[m
+[32m+[m[32m        {}[m
+[32m+[m[32m      Queue Size: 2000[m
+[32m+[m[32m      Value: true[m
+[32m+[m[32m    - Alpha: 0.9[m
+[32m+[m[32m      Class: rviz/Marker[m
+[32m+[m[32m      Enabled: true[m
+[32m+[m[32m      Marker Topic: /planning_vis/frontier[m
+[32m+[m[32m      Name: ExplorationFrontiers[m
+[32m+[m[32m      Namespaces:[m
+[32m+[m[32m        {}[m
+[32m+[m[32m      Queue Size: 2000[m
+[32m+[m[32m      Value: true[m
+     - Class: rviz/TF[m
+       Enabled: true[m
+       Frame Timeout: 15[m
+[36m@@ -149,17 +194,27 @@[m [mVisualization Manager:[m
+     - Class: rviz/Select[m
+     - Class: rviz/FocusCamera[m
+     - Class: rviz/Measure[m
+[32m+[m[32m    - Class: rviz/SetInitialPose[m
+[32m+[m[32m      Theta std deviation: 0.2617993950843811[m
+[32m+[m[32m      Topic: /initialpose[m
+[32m+[m[32m      X std deviation: 0.5[m
+[32m+[m[32m      Y std deviation: 0.5[m
+[32m+[m[32m    - Class: rviz/SetGoal[m
+[32m+[m[32m      Topic: /move_base_simple/goal[m
+[32m+[m[32m    - Class: rviz/PublishPoint[m
+[32m+[m[32m      Single click: true[m
+[32m+[m[32m      Topic: /clicked_point[m
+   Views:[m
+     Current:[m
+       Class: rviz/Orbit[m
+[31m-      Distance: 12[m
+[32m+[m[32m      Distance: 16[m
+       Focal Point:[m
+[31m-        X: 0[m
+[32m+[m[32m        X: 1.5[m
+         Y: 0[m
+[31m-        Z: 1[m
+[32m+[m[32m        Z: 1.2[m
+       Name: Current[m
+[31m-      Pitch: 0.6[m
+[31m-      Yaw: 0.8[m
+[32m+[m[32m      Pitch: 0.45[m
+[32m+[m[32m      Yaw: 0.7[m
+       Value: Orbit (rviz)[m
+ Window Geometry:[m
+   Height: 800[m
+[1mdiff --git a/launch/fast_lio/nidar_mapping.launch b/launch/fast_lio/nidar_mapping.launch[m
+[1mindex d5ed2ebb..ed60124c 100644[m
+[1m--- a/launch/fast_lio/nidar_mapping.launch[m
+[1m+++ b/launch/fast_lio/nidar_mapping.launch[m
+[36m@@ -25,6 +25,16 @@[m
+         <remap from="/Odometry" to="/Fast_LIO/odometry" />[m
+     </node>[m
+ [m
+[32m+[m[32m    <!-- Publish actual drone trajectory path from FAST-LIO odometry -->[m
+[32m+[m[32m    <node pkg="fast_lio" type="flight_path_publisher.py" name="flight_path_publisher" output="screen">[m
+[32m+[m[32m        <param name="odom_topic" value="/Fast_LIO/odometry" />[m
+[32m+[m[32m        <param name="path_topic" value="/flight_path" />[m
+[32m+[m[32m        <param name="frame_id" value="camera_init" />[m
+[32m+[m[32m        <param name="max_points" value="15000" />[m
+[32m+[m[32m        <param name="min_translation" value="0.02" />[m
+[32m+[m[32m        <param name="min_yaw" value="0.01" />[m
+[32m+[m[32m    </node>[m
+[32m+[m
+     <!-- RViz -->[m
+     <group if="$(arg rviz)">[m
+         <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d /home/developer/NIDAR/config/nidar_lidar.rviz" />[m
+[1mdiff --git a/launch/nidar_fuel.launch b/launch/nidar_fuel.launch[m
+[1mindex 41cf5c0e..5739fc05 100644[m
+[1m--- a/launch/nidar_fuel.launch[m
+[1m+++ b/launch/nidar_fuel.launch[m
+[36m@@ -18,12 +18,12 @@[m
+     <arg name="map_size_y_" value="$(arg map_size_y)"/>[m
+     <arg name="map_size_z_" value="$(arg map_size_z)"/>[m
+ [m
+[31m-    <!-- Bounded exploration box tailored for indoor warehouse environment -->[m
+[31m-    <arg name="box_min_x" value="-15.0"/>[m
+[31m-    <arg name="box_min_y" value="-15.0"/>[m
+[31m-    <arg name="box_min_z" value="0.2"/>[m
+[31m-    <arg name="box_max_x" value="15.0"/>[m
+[31m-    <arg name="box_max_y" value="15.0"/>[m
+[32m+[m[32m    <!-- Bounded exploration box in local relative frame (Spawn is Y=0.0; Door is Y=-0.3m; Warehouse Hall is Y=0 to 13.5m) -->[m
+[32m+[m[32m    <arg name="box_min_x" value="-6.5"/>[m
+[32m+[m[32m    <arg name="box_min_y" value="-0.3"/>[m
+[32m+[m[32m    <arg name="box_min_z" value="0.8"/>[m
+[32m+[m[32m    <arg name="box_max_x" value="6.5"/>[m
+[32m+[m[32m    <arg name="box_max_y" value="13.5"/>[m
+     <arg name="box_max_z" value="1.8"/>[m
+ [m
+     <arg name="odometry_topic" value="$(arg odom_topic)"/>[m
+[36m@@ -37,13 +37,17 @@[m
+     <arg name="fy" value="387.229248046875"/>[m
+ [m
+     <!-- Enforce Phase 4 safety constraints -->[m
+[31m-    <arg name="max_vel" value="1.0"/>[m
+[31m-    <arg name="max_acc" value="0.3"/>[m
+[32m+[m[32m    <arg name="max_vel" value="1.5"/>[m
+[32m+[m[32m    <arg name="max_acc" value="0.8"/>[m
+   </include>[m
+ [m
+   <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->[m
+   <param name="exploration_node/map_ros/frame_id" value="camera_init"/>[m
+ [m
+[32m+[m[32m    <!-- Bridge PX4/MAVROS local frame (map) to FAST-LIO world frame (camera_init). -->[m
+[32m+[m[32m    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"[m
+[32m+[m[32m      args="0 0 0 0 0 0 map camera_init"/>[m
+[32m+[m
+   <!-- FUEL B-Spline Trajectory Server -->[m
+   <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">[m
+     <remap from="/position_cmd" to="/planning/pos_cmd"/>[m
+[1mdiff --git a/nidar_lidar.rviz b/nidar_lidar.rviz[m
+[1mindex 5757b48d..397ca097 100644[m
+[1m--- a/nidar_lidar.rviz[m
+[1m+++ b/nidar_lidar.rviz[m
+[36m@@ -68,17 +68,26 @@[m [mVisualization Manager:[m
+       Use rainbow: true[m
+       Value: true[m
+     - Class: rviz/TF[m
+[31m-      Enabled: true[m
+[32m+[m[32m      Enabled: false[m
+       Frame Timeout: 15[m
+       Frames:[m
+         All Frames Enabled: true[m
+       Marker Scale: 1[m
+       Name: TF[m
+[31m-      Show Arrows: true[m
+[31m-      Show Axes: true[m
+[31m-      Show Names: true[m
+[32m+[m[32m      Show Arrows: false[m
+[32m+[m[32m      Show Axes: false[m
+[32m+[m[32m      Show Names: false[m
+       Tree:[m
+         {}[m
+[32m+[m[32m      Value: false[m
+[32m+[m[32m    - Alpha: 1[m
+[32m+[m[32m      Class: rviz/Marker[m
+[32m+[m[32m      Enabled: true[m
+[32m+[m[32m      Marker Topic: /planning/travel_traj[m
+[32m+[m[32m      Name: PlannedTrajectory[m
+[32m+[m[32m      Namespaces:[m
+[32m+[m[32m        {}[m
+[32m+[m[32m      Queue Size: 100[m
+       Value: true[m
+     - Alpha: 1[m
+       Class: rviz/RobotModel[m
+[1mdiff --git a/scripts/fuel_to_mavros_bridge.py b/scripts/fuel_to_mavros_bridge.py[m
+[1mindex a25cdcb3..cd679a1d 100755[m
+[1m--- a/scripts/fuel_to_mavros_bridge.py[m
+[1m+++ b/scripts/fuel_to_mavros_bridge.py[m
+[36m@@ -1,18 +1,103 @@[m
+ #!/usr/bin/env python3[m
+[32m+[m[32mimport math[m
+ import rospy[m
+ from quadrotor_msgs.msg import PositionCommand[m
+[31m-from mavros_msgs.msg import PositionTarget[m
+[32m+[m[32mfrom bspline.msg import Bspline[m
+[32m+[m[32mfrom mavros_msgs.msg import PositionTarget, State[m
+[32m+[m[32mfrom mavros_msgs.srv import SetMode, SetModeRequest[m
+ from geometry_msgs.msg import PoseStamped[m
+[31m-from std_msgs.msg import Bool[m
+[32m+[m[32mfrom sensor_msgs.msg import Imu, PointCloud2[m
+[32m+[m[32mimport sensor_msgs.point_cloud2 as pc2[m
+[32m+[m[32mfrom std_msgs.msg import Bool, Int32[m
+ from tf.transformations import quaternion_from_euler, euler_from_quaternion[m
+ [m
+ class FuelToMavrosBridge:[m
+     def __init__(self):[m
+[31m-        rospy.init_node('fuel_to_mavros_bridge', anonymous=True)[m
+[32m+[m[32m        rospy.init_node('fuel_to_mavros_bridge', anonymous=False)[m
+ [m
+         self.completed = False[m
+         self.current_pose = None[m
+[32m+[m[32m        self.latest_imu = None[m
+         self.latest_pos_cmd = None[m
+[32m+[m[32m        self.latest_pos_cmd_time = rospy.Time(0)[m
+[32m+[m[32m        self.latest_bspline_target = None[m
+[32m+[m[32m        self.is_armed = False[m
+[32m+[m[32m        self.prev_armed = False[m
+[32m+[m[32m        self.current_mode = ""[m
+[32m+[m[32m        self.last_mode_request_time = rospy.Time(0)[m
+[32m+[m[32m        self.bridge_start_time = rospy.Time.now()[m
+[32m+[m[32m        self.home_x = None[m
+[32m+[m[32m        self.home_y = None[m
+[32m+[m[32m        self.yaw_ref_locked = False[m
+[32m+[m[32m        self.yaw_ref = 0.0[m
+[32m+[m[32m        self.forced_heading_yaw = rospy.get_param('~forced_heading_yaw', 999.0)[m
+[32m+[m[32m        self.bootstrap_started = False[m
+[32m+[m[32m        self.bootstrap_start_time = rospy.Time(0)[m
+[32m+[m[32m        self.arena_min_x = rospy.get_param('~arena_min_x', -14.5)[m
+[32m+[m[32m        self.arena_max_x = rospy.get_param('~arena_max_x', 14.5)[m
+[32m+[m[32m        self.arena_min_y = rospy.get_param('~arena_min_y', -7.0)[m
+[32m+[m[32m        self.arena_max_y = rospy.get_param('~arena_max_y', 14.5)[m
+[32m+[m[32m        self.min_forward_distance = rospy.get_param('~min_forward_distance', 0.2)[m
+[32m+[m[32m        self.max_lateral_ratio = rospy.get_param('~max_lateral_ratio', 0.75)[m
+[32m+[m[32m        self.forward_corridor_width = rospy.get_param('~forward_corridor_width', 0.8)[m
+[32m+[m[32m        self.max_forward_step = rospy.get_param('~max_forward_step', 2.5)[m
+[32m+[m[32m        self.yaw_align_threshold = rospy.get_param('~yaw_align_threshold', 0.25)[m
+[32m+[m[32m        self.enable_yaw_align_gate = rospy.get_param('~enable_yaw_align_gate', False)[m
+[32m+[m[32m        self.bootstrap_duration = rospy.get_param('~bootstrap_duration', 20.0)[m
+[32m+[m[32m        self.bootstrap_forward_step = rospy.get_param('~bootstrap_forward_step', 0.8)[m
+[32m+[m[32m        self.bootstrap_corridor_half_width = rospy.get_param('~bootstrap_corridor_half_width', 1.2)[m
+[32m+[m[32m        self.enable_bootstrap_nudge = rospy.get_param('~enable_bootstrap_nudge', False)[m
+[32m+[m[32m        self.deactivate_on_completion = rospy.get_param('~deactivate_on_completion', False)[m
+[32m+[m[32m        self.min_completion_time = rospy.get_param('~min_completion_time', 180.0)[m
+[32m+[m[32m        self.min_completion_distance = rospy.get_param('~min_completion_distance', 4.0)[m
+[32m+[m[32m        self.enforce_forward_only = rospy.get_param('~enforce_forward_only', False)[m
+[32m+[m[32m        self.forward_min_step = rospy.get_param('~forward_min_step', 0.30)[m
+[32m+[m[32m        self.forward_replan_step = rospy.get_param('~forward_replan_step', 1.00)[m
+[32m+[m[32m        self.backward_tolerance = rospy.get_param('~backward_tolerance', 0.02)[m
+[32m+[m[32m        self.max_lateral_deviation = rospy.get_param('~max_lateral_deviation', 2.0)[m
+[32m+[m[32m        self.replan_lateral_limit = rospy.get_param('~replan_lateral_limit', 3.5)[m
+[32m+[m[32m        self.backward_imu_accel_threshold = rospy.get_param('~backward_imu_accel_threshold', -0.8)[m
+[32m+[m[32m        self.gate_entry_forward_distance = rospy.get_param('~gate_entry_forward_distance', 0.5)[m
+[32m+[m[32m        self.gate_entry_max_step = rospy.get_param('~gate_entry_max_step', 0.45)[m
+[32m+[m[32m        self.gate_entry_min_z = rospy.get_param('~gate_entry_min_z', 1.3)[m
+[32m+[m[32m        self.safety_grid_resolution = rospy.get_param('~safety_grid_resolution', 0.2)[m
+[32m+[m[32m        self.safety_grid_origin_x = rospy.get_param('~safety_grid_origin_x', -16.0)[m
+[32m+[m[32m        self.safety_grid_origin_y = rospy.get_param('~safety_grid_origin_y', -16.0)[m
+[32m+[m[32m        self.safety_grid_size_x = rospy.get_param('~safety_grid_size_x', 32.0)[m
+[32m+[m[32m        self.safety_grid_size_y = rospy.get_param('~safety_grid_size_y', 32.0)[m
+[32m+[m[32m        self.safety_inflation_cells = rospy.get_param('~safety_inflation_cells', 2)[m
+[32m+[m[32m        self.localization_reject_threshold = rospy.get_param('~localization_reject_threshold', 8)[m
+[32m+[m[32m        self.enable_line_check = rospy.get_param('~enable_line_check', False)[m
+[32m+[m
+[32m+[m[32m        self.origin_locked = False[m
+[32m+[m[32m        self.origin_x = 0.0[m
+[32m+[m[32m        self.origin_y = 0.0[m
+[32m+[m[32m        self.origin_z = 0.0[m
+[32m+[m[32m        self.max_forward_progress = 0.0[m
+[32m+[m[32m        self.localization_healthy = True[m
+[32m+[m[32m        self.localization_rejected_count = 0[m
+[32m+[m
+[32m+[m[32m        self.grid_width = int(self.safety_grid_size_x / self.safety_grid_resolution)[m
+[32m+[m[32m        self.grid_height = int(self.safety_grid_size_y / self.safety_grid_resolution)[m
+[32m+[m[32m        self.obstacles = set()[m
+[32m+[m[32m        self.inflated_obstacles = set()[m
+[32m+[m
+[32m+[m[32m        if abs(self.forced_heading_yaw) <= math.pi + 0.2:[m
+[32m+[m[32m            self.yaw_ref = self.forced_heading_yaw[m
+[32m+[m[32m            self.yaw_ref_locked = True[m
+[32m+[m[32m            rospy.loginfo(f"[Bridge] Using forced heading yaw {self.yaw_ref:.3f} rad")[m
+[32m+[m
+[32m+[m[32m        if self.enable_yaw_align_gate:[m
+[32m+[m[32m            rospy.loginfo("[Bridge] Yaw-align gate is ENABLED")[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            rospy.logwarn("[Bridge] Yaw-align gate is DISABLED (direct tracking mode)")[m
+[32m+[m
+[32m+[m[32m        self.sub_state = rospy.Subscriber([m
+[32m+[m[32m            '/mavros/state',[m
+[32m+[m[32m            State,[m
+[32m+[m[32m            self.state_callback,[m
+[32m+[m[32m            queue_size=1[m
+[32m+[m[32m        )[m
+ [m
+         self.sub_completed = rospy.Subscriber([m
+             '/exploration_completed',[m
+[36m@@ -35,6 +120,41 @@[m [mclass FuelToMavrosBridge:[m
+             queue_size=1[m
+         )[m
+ [m
+[32m+[m[32m        self.sub_imu = rospy.Subscriber([m
+[32m+[m[32m            '/mavros/imu/data',[m
+[32m+[m[32m            Imu,[m
+[32m+[m[32m            self.imu_callback,[m
+[32m+[m[32m            queue_size=5[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        self.sub_bspline = rospy.Subscriber([m
+[32m+[m[32m            '/planning/bspline',[m
+[32m+[m[32m            Bspline,[m
+[32m+[m[32m            self.bspline_callback,[m
+[32m+[m[32m            queue_size=5[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        self.sub_occ = rospy.Subscriber([m
+[32m+[m[32m            '/sdf_map/occupancy_all',[m
+[32m+[m[32m            PointCloud2,[m
+[32m+[m[32m            self.occupancy_callback,[m
+[32m+[m[32m            queue_size=1[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        self.sub_loc_health = rospy.Subscriber([m
+[32m+[m[32m            '/localization/healthy',[m
+[32m+[m[32m            Bool,[m
+[32m+[m[32m            self.localization_health_callback,[m
+[32m+[m[32m            queue_size=5[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        self.sub_loc_rejected = rospy.Subscriber([m
+[32m+[m[32m            '/localization/rejected_count',[m
+[32m+[m[32m            Int32,[m
+[32m+[m[32m            self.localization_rejected_callback,[m
+[32m+[m[32m            queue_size=5[m
+[32m+[m[32m        )[m
+[32m+[m
+         self.pub_setpoint_raw = rospy.Publisher([m
+             '/mavros/setpoint_raw/local', [m
+             PositionTarget, [m
+[36m@@ -47,27 +167,469 @@[m [mclass FuelToMavrosBridge:[m
+             queue_size=10[m
+         )[m
+ [m
+[32m+[m[32m        self.set_mode_client = rospy.ServiceProxy('/mavros/set_mode', SetMode)[m
+[32m+[m
+         # Continuous setpoint timer running at 20Hz for rock-solid OFFBOARD stability[m
+         self.timer = rospy.Timer(rospy.Duration(0.05), self.timer_callback)[m
+ [m
+         rospy.loginfo("FUEL to MAVROS Setpoint Bridge initialized with continuous 20Hz setpoint streaming.")[m
+ [m
+[32m+[m[32m    def state_callback(self, msg):[m
+[32m+[m[32m        self.prev_armed = self.is_armed[m
+[32m+[m[32m        self.is_armed = msg.armed[m
+[32m+[m[32m        self.current_mode = msg.mode[m
+[32m+[m
+[32m+[m[32m        # Arm-time lock for mission origin and forward heading reference.[m
+[32m+[m[32m        if (not self.prev_armed) and self.is_armed and self.current_pose is not None:[m
+[32m+[m[32m            self.lock_origin_and_heading("arm")[m
+[32m+[m
+[32m+[m[32m        # Prepare for a fresh mission origin when disarmed.[m
+[32m+[m[32m        if self.prev_armed and (not self.is_armed):[m
+[32m+[m[32m            self.origin_locked = False[m
+[32m+[m[32m            self.max_forward_progress = 0.0[m
+[32m+[m
+[32m+[m[32m    def imu_callback(self, msg):[m
+[32m+[m[32m        self.latest_imu = msg[m
+[32m+[m
+[32m+[m[32m    def localization_health_callback(self, msg):[m
+[32m+[m[32m        self.localization_healthy = bool(msg.data)[m
+[32m+[m
+[32m+[m[32m    def localization_rejected_callback(self, msg):[m
+[32m+[m[32m        self.localization_rejected_count = int(msg.data)[m
+[32m+[m
+[32m+[m[32m    def metric_to_grid(self, x, y):[m
+[32m+[m[32m        gx = int(round((x - self.safety_grid_origin_x) / self.safety_grid_resolution))[m
+[32m+[m[32m        gy = int(round((y - self.safety_grid_origin_y) / self.safety_grid_resolution))[m
+[32m+[m[32m        gx = max(0, min(self.grid_width - 1, gx))[m
+[32m+[m[32m        gy = max(0, min(self.grid_height - 1, gy))[m
+[32m+[m[32m        return gx, gy[m
+[32m+[m
+[32m+[m[32m    def inflate_obstacles(self):[m
+[32m+[m[32m        inflated = set()[m
+[32m+[m[32m        r = self.safety_inflation_cells[m
+[32m+[m[32m        for gx, gy in self.obstacles:[m
+[32m+[m[32m            for dx in range(-r, r + 1):[m
+[32m+[m[32m                for dy in range(-r, r + 1):[m
+[32m+[m[32m                    if dx * dx + dy * dy > r * r:[m
+[32m+[m[32m                        continue[m
+[32m+[m[32m                    nx, ny = gx + dx, gy + dy[m
+[32m+[m[32m                    if 0 <= nx < self.grid_width and 0 <= ny < self.grid_height:[m
+[32m+[m[32m                        inflated.add((nx, ny))[m
+[32m+[m[32m        self.inflated_obstacles = inflated[m
+[32m+[m
+[32m+[m[32m    def occupancy_callback(self, msg):[m
+[32m+[m[32m        new_obs = set()[m
+[32m+[m[32m        for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):[m
+[32m+[m[32m            if 0.2 <= p[2] <= 2.5:[m
+[32m+[m[32m                gx, gy = self.metric_to_grid(p[0], p[1])[m
+[32m+[m[32m                new_obs.add((gx, gy))[m
+[32m+[m[32m        self.obstacles = new_obs[m
+[32m+[m[32m        self.inflate_obstacles()[m
+[32m+[m
+[32m+[m[32m        self.enable_line_check = rospy.get_param('~enable_line_check', False)[m
+[32m+[m
+[32m+[m[32m    def line_blocked(self, x0, y0, x1, y1):[m
+[32m+[m[32m        if not self.enable_line_check or not self.inflated_obstacles:[m
+[32m+[m[32m            return False[m
+[32m+[m
+[32m+[m[32m        gx0, gy0 = self.metric_to_grid(x0, y0)[m
+[32m+[m[32m        gx1, gy1 = self.metric_to_grid(x1, y1)[m
+[32m+[m
+[32m+[m[32m        dx = abs(gx1 - gx0)[m
+[32m+[m[32m        dy = abs(gy1 - gy0)[m
+[32m+[m[32m        sx = 1 if gx0 < gx1 else -1[m
+[32m+[m[32m        sy = 1 if gy0 < gy1 else -1[m
+[32m+[m[32m        err = dx - dy[m
+[32m+[m[32m        x = gx0[m
+[32m+[m[32m        y = gy0[m
+[32m+[m
+[32m+[m[32m        while True:[m
+[32m+[m[32m            if (x, y) in self.inflated_obstacles:[m
+[32m+[m[32m                return True[m
+[32m+[m[32m            if x == gx1 and y == gy1:[m
+[32m+[m[32m                break[m
+[32m+[m[32m            e2 = 2 * err[m
+[32m+[m[32m            if e2 > -dy:[m
+[32m+[m[32m                err -= dy[m
+[32m+[m[32m                x += sx[m
+[32m+[m[32m            if e2 < dx:[m
+[32m+[m[32m                err += dx[m
+[32m+[m[32m                y += sy[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m[32m    def lock_origin_and_heading(self, reason):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        self.origin_x = self.current_pose.pose.position.x[m
+[32m+[m[32m        self.origin_y = self.current_pose.pose.position.y[m
+[32m+[m[32m        self.origin_z = self.current_pose.pose.position.z[m
+[32m+[m[32m        self.origin_locked = True[m
+[32m+[m
+[32m+[m[32m        # Unless explicitly forced, forward reference is arm-time heading.[m
+[32m+[m[32m        if abs(self.forced_heading_yaw) > math.pi + 0.2:[m
+[32m+[m[32m            self.yaw_ref = self.get_current_yaw()[m
+[32m+[m[32m            self.yaw_ref_locked = True[m
+[32m+[m
+[32m+[m[32m        self.max_forward_progress = 0.0[m
+[32m+[m[32m        rospy.loginfo([m
+[32m+[m[32m            "[Bridge] Origin locked (%s): x=%.2f y=%.2f z=%.2f, forward_yaw=%.3f",[m
+[32m+[m[32m            reason,[m
+[32m+[m[32m            self.origin_x,[m
+[32m+[m[32m            self.origin_y,[m
+[32m+[m[32m            self.origin_z,[m
+[32m+[m[32m            self.yaw_ref,[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    def get_forward_lateral(self, x, y):[m
+[32m+[m[32m        dx = x - self.origin_x[m
+[32m+[m[32m        dy = y - self.origin_y[m
+[32m+[m[32m        fwd = math.cos(self.yaw_ref) * dx + math.sin(self.yaw_ref) * dy[m
+[32m+[m[32m        lat = -math.sin(self.yaw_ref) * dx + math.cos(self.yaw_ref) * dy[m
+[32m+[m[32m        return fwd, lat[m
+[32m+[m
+[32m+[m[32m    def get_forward_velocity(self, vx, vy):[m
+[32m+[m[32m        return math.cos(self.yaw_ref) * vx + math.sin(self.yaw_ref) * vy[m
+[32m+[m
+[32m+[m[32m    def build_forward_replan_target(self, candidate_x, candidate_y, candidate_z):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return None[m
+[32m+[m
+[32m+[m[32m        curr_x = self.current_pose.pose.position.x[m
+[32m+[m[32m        curr_y = self.current_pose.pose.position.y[m
+[32m+[m[32m        curr_fwd, _ = self.get_forward_lateral(curr_x, curr_y)[m
+[32m+[m[32m        target_fwd = max(curr_fwd + self.forward_replan_step, self.max_forward_progress + self.forward_min_step)[m
+[32m+[m
+[32m+[m[32m        # Preserve planner lateral intent while enforcing non-negative forward progress.[m
+[32m+[m[32m        _, candidate_lat = self.get_forward_lateral(candidate_x, candidate_y)[m
+[32m+[m[32m        target_lat = max(-self.replan_lateral_limit, min(self.replan_lateral_limit, candidate_lat))[m
+[32m+[m
+[32m+[m[32m        target_x = self.origin_x + target_fwd * math.cos(self.yaw_ref) - target_lat * math.sin(self.yaw_ref)[m
+[32m+[m[32m        target_y = self.origin_y + target_fwd * math.sin(self.yaw_ref) + target_lat * math.cos(self.yaw_ref)[m
+[32m+[m[32m        target_z = min(1.5, max(1.0, candidate_z))[m
+[32m+[m[32m        return target_x, target_y, target_z[m
+[32m+[m
+[32m+[m[32m    def clamp_to_arena_bounds(self, candidate_x, candidate_y, candidate_z):[m
+[32m+[m[32m        if not self.origin_locked or self.current_pose is None:[m
+[32m+[m[32m            return candidate_x, candidate_y, candidate_z[m
+[32m+[m
+[32m+[m[32m        fwd, lat = self.get_forward_lateral(candidate_x, candidate_y)[m
+[32m+[m[32m        curr_fwd, _ = self.get_forward_lateral(self.current_pose.pose.position.x, self.current_pose.pose.position.y)[m
+[32m+[m
+[32m+[m[32m        # Strict Arena Boundary Clamps in Forward/Lateral Body Frame:[m
+[32m+[m[32m        # fwd >= -0.3m (never move backward out the entrance door)[m
+[32m+[m[32m        # fwd <= 13.5m (never move past far warehouse wall)[m
+[32m+[m[32m        # lat in [-6.2m, 6.2m] (never hit left/right warehouse walls)[m
+[32m+[m[32m        fwd_clamped = max(-0.3, min(13.5, fwd))[m
+[32m+[m
+[32m+[m[32m        # Multi-stage arena geometry safety clamp matching physical warehouse structure:[m
+[32m+[m[32m        # Stage 1: Entrance Doorway (fwd < 0.8m) -> restrict lateral to door width [-0.6m, 0.6m][m
+[32m+[m[32m        # Stage 2: Entrance Alcove (0.8m <= fwd < 2.5m) -> restrict lateral to alcove width [-1.8m, 1.8m][m
+[32m+[m[32m        # Stage 3: Main Warehouse Arena (fwd >= 2.5m) -> allow full warehouse width [-6.0m, 6.0m][m
+[32m+[m[32m        effective_fwd = min(curr_fwd, fwd_clamped)[m
+[32m+[m[32m        if effective_fwd < 0.8:[m
+[32m+[m[32m            lat_clamped = max(-0.6, min(0.6, lat))[m
+[32m+[m[32m        elif effective_fwd < 2.5:[m
+[32m+[m[32m            lat_clamped = max(-1.8, min(1.8, lat))[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            lat_clamped = max(-6.0, min(6.0, lat))[m
+[32m+[m
+[32m+[m[32m        # Convert clamped fwd/lat back to map coordinates[m
+[32m+[m[32m        clamped_x = self.origin_x + fwd_clamped * math.cos(self.yaw_ref) - lat_clamped * math.sin(self.yaw_ref)[m
+[32m+[m[32m        clamped_y = self.origin_y + fwd_clamped * math.sin(self.yaw_ref) + lat_clamped * math.cos(self.yaw_ref)[m
+[32m+[m
+[32m+[m[32m        # Hard Arena Boundary Gate Clamp (protecting gate at Y = -7.0m)[m
+[32m+[m[32m        if hasattr(self, 'arena_min_y') and self.arena_min_y is not None:[m
+[32m+[m[32m            clamped_y = max(self.arena_min_y, clamped_y)[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            clamped_y = max(-7.0, clamped_y)[m
+[32m+[m
+[32m+[m[32m        if hasattr(self, 'arena_max_y') and self.arena_max_y is not None:[m
+[32m+[m[32m            clamped_y = min(self.arena_max_y, clamped_y)[m
+[32m+[m[32m        if hasattr(self, 'arena_min_x') and self.arena_min_x is not None:[m
+[32m+[m[32m            clamped_x = max(self.arena_min_x, clamped_x)[m
+[32m+[m[32m        if hasattr(self, 'arena_max_x') and self.arena_max_x is not None:[m
+[32m+[m[32m            clamped_x = min(self.arena_max_x, clamped_x)[m
+[32m+[m
+[32m+[m[32m        # Safe Cruising Altitude Clamp: Z in [1.0m, 1.8m] (clears all 0.5m-0.7m warehouse obstacles)[m
+[32m+[m[32m        clamped_z = max(1.0, min(1.8, candidate_z))[m
+[32m+[m
+[32m+[m[32m        return clamped_x, clamped_y, clamped_z[m
+[32m+[m
+[32m+[m
+[32m+[m[32m    def enforce_forward_policy(self, candidate_x, candidate_y, candidate_z, cmd_vx, cmd_vy):[m
+[32m+[m[32m        if not self.enforce_forward_only or self.current_pose is None:[m
+[32m+[m[32m            return candidate_x, candidate_y, candidate_z, False[m
+[32m+[m
+[32m+[m[32m        if not self.origin_locked:[m
+[32m+[m[32m            self.lock_origin_and_heading("first-command")[m
+[32m+[m[32m        if not self.origin_locked:[m
+[32m+[m[32m            return candidate_x, candidate_y, candidate_z, False[m
+[32m+[m
+[32m+[m[32m        curr_x = self.current_pose.pose.position.x[m
+[32m+[m[32m        curr_y = self.current_pose.pose.position.y[m
+[32m+[m[32m        curr_fwd, _ = self.get_forward_lateral(curr_x, curr_y)[m
+[32m+[m[32m        tgt_fwd, tgt_lat = self.get_forward_lateral(candidate_x, candidate_y)[m
+[32m+[m[32m        fwd_vel = self.get_forward_velocity(cmd_vx, cmd_vy)[m
+[32m+[m
+[32m+[m[32m        if curr_fwd > self.max_forward_progress:[m
+[32m+[m[32m            self.max_forward_progress = curr_fwd[m
+[32m+[m
+[32m+[m[32m        backward_by_target = tgt_fwd < (curr_fwd - self.backward_tolerance)[m
+[32m+[m[32m        backward_vs_progress = tgt_fwd < (self.max_forward_progress - self.backward_tolerance)[m
+[32m+[m[32m        backward_by_velocity = fwd_vel < (-self.backward_tolerance)[m
+[32m+[m[32m        if backward_by_target or backward_vs_progress or backward_by_velocity:[m
+[32m+[m[32m            replanned = self.build_forward_replan_target(candidate_x, candidate_y, candidate_z)[m
+[32m+[m[32m            if replanned is None:[m
+[32m+[m[32m                return candidate_x, candidate_y, candidate_z, False[m
+[32m+[m[32m            rx, ry, rz = replanned[m
+[32m+[m[32m            rospy.logwarn_throttle([m
+[32m+[m[32m                1.0,[m
+[32m+[m[32m                "[Bridge] Forward-only filter rejected cmd (curr_f=%.2f max_f=%.2f tgt_f=%.2f vf=%.2f lat=%.2f). Replanned -> (%.2f, %.2f, %.2f)",[m
+[32m+[m[32m                curr_fwd,[m
+[32m+[m[32m                self.max_forward_progress,[m
+[32m+[m[32m                tgt_fwd,[m
+[32m+[m[32m                fwd_vel,[m
+[32m+[m[32m                tgt_lat,[m
+[32m+[m[32m                rx,[m
+[32m+[m[32m                ry,[m
+[32m+[m[32m                rz,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            return rx, ry, rz, True[m
+[32m+[m
+[32m+[m[32m        return candidate_x, candidate_y, candidate_z, False[m
+[32m+[m
+     def completed_callback(self, msg):[m
+[31m-        if msg.data and not self.completed:[m
+[31m-            rospy.loginfo("[Bridge] Exploration completed signal received. Deactivating bridge relay.")[m
+[31m-            self.completed = True[m
+[32m+[m[32m        if not msg.data or self.completed:[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        if not self.deactivate_on_completion:[m
+[32m+[m[32m            rospy.logwarn_throttle(2.0, "[Bridge] Ignoring exploration_completed to avoid false bridge shutdown")[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        elapsed = (rospy.Time.now() - self.bridge_start_time).to_sec() if self.bridge_start_time else 0.0[m
+[32m+[m[32m        if elapsed < self.min_completion_time:[m
+[32m+[m[32m            rospy.logwarn_throttle(2.0, f"[Bridge] Ignored early completion signal (elapsed {elapsed:.1f}s < {self.min_completion_time:.1f}s)")[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        if self.current_pose is not None and self.home_x is not None and self.home_y is not None:[m
+[32m+[m[32m            traveled = math.hypot(self.current_pose.pose.position.x - self.home_x,[m
+[32m+[m[32m                                  self.current_pose.pose.position.y - self.home_y)[m
+[32m+[m[32m            if traveled < self.min_completion_distance:[m
+[32m+[m[32m                rospy.logwarn_throttle(2.0, f"[Bridge] Ignored completion: traveled only {traveled:.2f}m")[m
+[32m+[m[32m                return[m
+[32m+[m
+[32m+[m[32m        rospy.loginfo("[Bridge] Exploration completion validated. Deactivating bridge relay.")[m
+[32m+[m[32m        self.completed = True[m
+[32m+[m
+[32m+[m[32m    def command_is_safe(self, target_x, target_y):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return True[m
+[32m+[m
+[32m+[m[32m        current_x = self.current_pose.pose.position.x[m
+[32m+[m[32m        current_y = self.current_pose.pose.position.y[m
+[32m+[m[32m        dx = target_x - current_x[m
+[32m+[m[32m        dy = target_y - current_y[m
+[32m+[m
+[32m+[m[32m        step = math.hypot(dx, dy)[m
+[32m+[m[32m        if step > (self.max_forward_step * 3.0):[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, f"[Bridge] Blocking overly long candidate step: {step:.2f}m")[m
+[32m+[m[32m            return False[m
+[32m+[m
+[32m+[m[32m        if not (self.arena_min_x <= target_x <= self.arena_max_x and[m
+[32m+[m[32m                self.arena_min_y <= target_y <= self.arena_max_y):[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, f"[Bridge] Blocking out-of-bounds command: ({target_x:.2f}, {target_y:.2f})")[m
+[32m+[m[32m            return False[m
+[32m+[m
+[32m+[m[32m        if self.line_blocked(current_x, current_y, target_x, target_y):[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, f"[Bridge] Blocking collision path to ({target_x:.2f}, {target_y:.2f})")[m
+[32m+[m[32m            return False[m
+[32m+[m
+[32m+[m[32m        return True[m
+[32m+[m
+[32m+[m[32m    def build_hover_target(self):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return None, None[m
+[32m+[m
+[32m+[m[32m        target = PositionTarget()[m
+[32m+[m[32m        target.header.stamp = rospy.Time.now()[m
+[32m+[m[32m        target.header.frame_id = "map"[m
+[32m+[m[32m        target.coordinate_frame = PositionTarget.FRAME_LOCAL_NED[m
+[32m+[m[32m        target.position.x = self.current_pose.pose.position.x[m
+[32m+[m[32m        target.position.y = self.current_pose.pose.position.y[m
+[32m+[m[32m        target.position.z = max(1.0, min(1.5, self.current_pose.pose.position.z))[m
+[32m+[m[32m        target.velocity.x = 0.0[m
+[32m+[m[32m        target.velocity.y = 0.0[m
+[32m+[m[32m        target.velocity.z = 0.0[m
+[32m+[m[32m        target.yaw = self.get_current_yaw()[m
+[32m+[m[32m        target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m
+[32m+[m[32m        pose = PoseStamped()[m
+[32m+[m[32m        pose.header = target.header[m
+[32m+[m[32m        pose.pose.position = target.position[m
+[32m+[m[32m        q = quaternion_from_euler(0, 0, target.yaw)[m
+[32m+[m[32m        pose.pose.orientation.x = q[0][m
+[32m+[m[32m        pose.pose.orientation.y = q[1][m
+[32m+[m[32m        pose.pose.orientation.z = q[2][m
+[32m+[m[32m        pose.pose.orientation.w = q[3][m
+[32m+[m[32m        return target, pose[m
+[32m+[m
+[32m+[m[32m    def get_current_yaw(self):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return 0.0[m
+[32m+[m
+[32m+[m[32m        q = [[m
+[32m+[m[32m            self.current_pose.pose.orientation.x,[m
+[32m+[m[32m            self.current_pose.pose.orientation.y,[m
+[32m+[m[32m            self.current_pose.pose.orientation.z,[m
+[32m+[m[32m            self.current_pose.pose.orientation.w[m
+[32m+[m[32m        ][m
+[32m+[m[32m        _, _, yaw = euler_from_quaternion(q)[m
+[32m+[m[32m        return yaw[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def normalize_angle(angle):[m
+[32m+[m[32m        return math.atan2(math.sin(angle), math.cos(angle))[m
+[32m+[m
+[32m+[m[32m    def build_heading_first_target(self, candidate_x, candidate_y, candidate_z):[m
+[32m+[m[32m        if self.current_pose is None:[m
+[32m+[m[32m            return None[m
+[32m+[m
+[32m+[m[32m        current_x = self.current_pose.pose.position.x[m
+[32m+[m[32m        current_y = self.current_pose.pose.position.y[m
+[32m+[m[32m        current_yaw = self.get_current_yaw()[m
+[32m+[m
+[32m+[m[32m        desired_yaw = math.atan2(candidate_y - current_y, candidate_x - current_x)[m
+[32m+[m[32m        yaw_error = self.normalize_angle(desired_yaw - current_yaw)[m
+[32m+[m
+[32m+[m[32m        target = PositionTarget()[m
+[32m+[m[32m        target.header.stamp = rospy.Time.now()[m
+[32m+[m[32m        target.header.frame_id = "map"[m
+[32m+[m[32m        target.coordinate_frame = PositionTarget.FRAME_LOCAL_NED[m
+[32m+[m
+[32m+[m[32m        pose = PoseStamped()[m
+[32m+[m[32m        pose.header = target.header[m
+[32m+[m
+[32m+[m[32m        # First rotate to face the direction of motion, then translate forward.[m
+[32m+[m[32m        if abs(yaw_error) > self.yaw_align_threshold:[m
+[32m+[m[32m            target.position.x = current_x[m
+[32m+[m[32m            target.position.y = current_y[m
+[32m+[m[32m            target.position.z = min(1.5, max(1.0, candidate_z))[m
+[32m+[m[32m            target.velocity.x = 0.0[m
+[32m+[m[32m            target.velocity.y = 0.0[m
+[32m+[m[32m            target.velocity.z = 0.0[m
+[32m+[m[32m            target.yaw = desired_yaw[m
+[32m+[m[32m            target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m
+[32m+[m[32m            q = quaternion_from_euler(0, 0, desired_yaw)[m
+[32m+[m[32m            pose.pose.position.x = target.position.x[m
+[32m+[m[32m            pose.pose.position.y = target.position.y[m
+[32m+[m[32m            pose.pose.position.z = target.position.z[m
+[32m+[m[32m            pose.pose.orientation.x = q[0][m
+[32m+[m[32m            pose.pose.orientation.y = q[1][m
+[32m+[m[32m            pose.pose.orientation.z = q[2][m
+[32m+[m[32m            pose.pose.orientation.w = q[3][m
+[32m+[m[32m            return target, pose, False, desired_yaw, yaw_error[m
+[32m+[m
+[32m+[m[32m        forward_step = min(self.max_forward_step, math.hypot(candidate_x - current_x, candidate_y - current_y))[m
+[32m+[m[32m        if forward_step < self.min_forward_distance:[m
+[32m+[m[32m            forward_step = self.min_forward_distance[m
+[32m+[m
+[32m+[m[32m        target.position.x = current_x + forward_step * math.cos(desired_yaw)[m
+[32m+[m[32m        target.position.y = current_y + forward_step * math.sin(desired_yaw)[m
+[32m+[m[32m        target.position.z = min(1.5, max(1.0, candidate_z))[m
+[32m+[m[32m        target.velocity.x = 0.0[m
+[32m+[m[32m        target.velocity.y = 0.0[m
+[32m+[m[32m        target.velocity.z = 0.0[m
+[32m+[m[32m        target.yaw = desired_yaw[m
+[32m+[m[32m        target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m
+[32m+[m[32m        q = quaternion_from_euler(0, 0, desired_yaw)[m
+[32m+[m[32m        pose.pose.position.x = target.position.x[m
+[32m+[m[32m        pose.pose.position.y = target.position.y[m
+[32m+[m[32m        pose.pose.position.z = target.position.z[m
+[32m+[m[32m        pose.pose.orientation.x = q[0][m
+[32m+[m[32m        pose.pose.orientation.y = q[1][m
+[32m+[m[32m        pose.pose.orientation.z = q[2][m
+[32m+[m[32m        pose.pose.orientation.w = q[3][m
+[32m+[m
+[32m+[m[32m        return target, pose, True, desired_yaw, yaw_error[m
+ [m
+     def pose_callback(self, msg):[m
+         self.current_pose = msg[m
+[32m+[m[32m        if self.home_x is None:[m
+[32m+[m[32m            self.home_x = msg.pose.position.x[m
+[32m+[m[32m            self.home_y = msg.pose.position.y[m
+[32m+[m[32m        if not self.yaw_ref_locked:[m
+[32m+[m[32m            q = [[m
+[32m+[m[32m                msg.pose.orientation.x,[m
+[32m+[m[32m                msg.pose.orientation.y,[m
+[32m+[m[32m                msg.pose.orientation.z,[m
+[32m+[m[32m                msg.pose.orientation.w[m
+[32m+[m[32m            ][m
+[32m+[m[32m            _, _, self.yaw_ref = euler_from_quaternion(q)[m
+[32m+[m[32m            self.yaw_ref_locked = True[m
+[32m+[m[32m            rospy.loginfo(f"[Bridge] Locked forward reference yaw at {self.yaw_ref:.3f} rad")[m
+[32m+[m
+[32m+[m[32m        if self.is_armed and not self.origin_locked:[m
+[32m+[m[32m            self.lock_origin_and_heading("pose-update")[m
+ [m
+     def pos_cmd_callback(self, msg):[m
+         if not self.completed:[m
+             self.latest_pos_cmd = msg[m
+[32m+[m[32m            self.latest_pos_cmd_time = rospy.Time.now()[m
+[32m+[m[32m            if not self.bootstrap_started:[m
+[32m+[m[32m                self.bootstrap_started = True[m
+[32m+[m[32m                self.bootstrap_start_time = rospy.Time.now()[m
+[32m+[m
+[32m+[m[32m    def bspline_callback(self, msg):[m
+[32m+[m[32m        if self.completed or not msg.pos_pts:[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        # Prefer the first control point that is clearly ahead of the vehicle.[m
+[32m+[m[32m        # This keeps the fallback moving forward even when the pos_cmd stream is stale.[m
+[32m+[m[32m        candidate = None[m
+[32m+[m[32m        if self.current_pose is not None:[m
+[32m+[m[32m            yaw = self.get_current_yaw()[m
+[32m+[m
+[32m+[m[32m            current_x = self.current_pose.pose.position.x[m
+[32m+[m[32m            current_y = self.current_pose.pose.position.y[m
+[32m+[m[32m            for point in msg.pos_pts:[m
+[32m+[m[32m                dx = point.x - current_x[m
+[32m+[m[32m                dy = point.y - current_y[m
+[32m+[m[32m                forward = math.cos(yaw) * dx + math.sin(yaw) * dy[m
+[32m+[m[32m                lateral = -math.sin(yaw) * dx + math.cos(yaw) * dy[m
+[32m+[m[32m                if forward > self.min_forward_distance and abs(lateral) <= self.forward_corridor_width:[m
+[32m+[m[32m                    candidate = point[m
+[32m+[m[32m                    break[m
+[32m+[m
+[32m+[m[32m        if candidate is None:[m
+[32m+[m[32m            idx = max(0, min(len(msg.pos_pts) - 1, len(msg.pos_pts) // 2))[m
+[32m+[m[32m            candidate = msg.pos_pts[idx][m
+[32m+[m
+[32m+[m[32m        self.latest_bspline_target = candidate[m
+ [m
+     def timer_callback(self, event):[m
+         if self.completed:[m
+             return[m
+ [m
+[32m+[m[32m        # Keep OFFBOARD mode latched during autonomous run.[m
+[32m+[m[32m        # Request periodically to recover from AUTO.LOITER or callback desync.[m
+[32m+[m[32m        if self.current_pose is not None and not self.completed:[m
+[32m+[m[32m            now = rospy.Time.now()[m
+[32m+[m[32m            if self.last_mode_request_time == rospy.Time(0) or (now - self.last_mode_request_time).to_sec() > 1.0:[m
+[32m+[m[32m                req = SetModeRequest()[m
+[32m+[m[32m                req.custom_mode = 'OFFBOARD'[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    resp = self.set_mode_client.call(req)[m
+[32m+[m[32m                    if resp.mode_sent:[m
+[32m+[m[32m                        rospy.loginfo_throttle(2.0, "[Bridge] Requested OFFBOARD mode")[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                        rospy.logwarn_throttle(2.0, "[Bridge] OFFBOARD mode request rejected")[m
+[32m+[m[32m                except rospy.ServiceException as exc:[m
+[32m+[m[32m                    rospy.logwarn_throttle(2.0, f"[Bridge] OFFBOARD request failed: {exc}")[m
+[32m+[m[32m                self.last_mode_request_time = now[m
+[32m+[m
+         target = PositionTarget()[m
+         target.header.stamp = rospy.Time.now()[m
+         target.header.frame_id = "map"[m
+[36m@@ -76,36 +638,176 @@[m [mclass FuelToMavrosBridge:[m
+         pose = PoseStamped()[m
+         pose.header = target.header[m
+ [m
+[31m-        if self.latest_pos_cmd is not None:[m
+[32m+[m[32m        pos_cmd_fresh = ([m
+[32m+[m[32m            self.latest_pos_cmd is not None and[m
+[32m+[m[32m            self.latest_pos_cmd_time != rospy.Time(0) and[m
+[32m+[m[32m            (rospy.Time.now() - self.latest_pos_cmd_time).to_sec() < 0.8[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        using_bspline_fallback = False[m
+[32m+[m[32m        if pos_cmd_fresh:[m
+             # Position from latest FUEL command[m
+[31m-            target.position.x = self.latest_pos_cmd.position.x[m
+[31m-            target.position.y = self.latest_pos_cmd.position.y[m
+[31m-            target.position.z = min(1.5, max(1.0, self.latest_pos_cmd.position.z))[m
+[32m+[m[32m            candidate_x = self.latest_pos_cmd.position.x[m
+[32m+[m[32m            candidate_y = self.latest_pos_cmd.position.y[m
+[32m+[m[32m            candidate_z = self.latest_pos_cmd.position.z[m
+[32m+[m[32m            cmd_vx = self.latest_pos_cmd.velocity.x[m
+[32m+[m[32m            cmd_vy = self.latest_pos_cmd.velocity.y[m
+[32m+[m[32m            cmd_vz = self.latest_pos_cmd.velocity.z[m
+[32m+[m[32m            cmd_yaw = self.latest_pos_cmd.yaw[m
+[32m+[m[32m        elif self.latest_bspline_target is not None and self.current_pose is not None:[m
+[32m+[m[32m            # Fallback path: follow bspline when traj_server does not emit pos_cmd.[m
+[32m+[m[32m            using_bspline_fallback = True[m
+[32m+[m[32m            candidate_x = self.latest_bspline_target.x[m
+[32m+[m[32m            candidate_y = self.latest_bspline_target.y[m
+[32m+[m[32m            candidate_z = self.latest_bspline_target.z[m
+[32m+[m[32m            cmd_vx = 0.0[m
+[32m+[m[32m            cmd_vy = 0.0[m
+[32m+[m[32m            cmd_vz = 0.0[m
+ [m
+[31m-            # Velocity[m
+[31m-            target.velocity.x = self.latest_pos_cmd.velocity.x[m
+[31m-            target.velocity.y = self.latest_pos_cmd.velocity.y[m
+[31m-            target.velocity.z = self.latest_pos_cmd.velocity.z[m
+[32m+[m[32m            q = [[m
+[32m+[m[32m                self.current_pose.pose.orientation.x,[m
+[32m+[m[32m                self.current_pose.pose.orientation.y,[m
+[32m+[m[32m                self.current_pose.pose.orientation.z,[m
+[32m+[m[32m                self.current_pose.pose.orientation.w[m
+[32m+[m[32m            ][m
+[32m+[m[32m            _, _, cmd_yaw = euler_from_quaternion(q)[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            # Initial hold target: pull forward into arena at Y=0.50m and altitude Z=1.30m[m
+[32m+[m[32m            candidate_x = 0.0[m
+[32m+[m[32m            candidate_y = 0.50[m
+[32m+[m[32m            candidate_z = 1.30[m
+[32m+[m[32m            cmd_vx = cmd_vy = cmd_vz = 0.0[m
+[32m+[m[32m            cmd_yaw = self.yaw_ref[m
+ [m
+[31m-            # Yaw[m
+[31m-            target.yaw = self.latest_pos_cmd.yaw[m
+[32m+[m[32m        if candidate_x is not None:[m
+[32m+[m[32m            if using_bspline_fallback:[m
+[32m+[m[32m                rospy.logwarn_throttle(2.0, "[Bridge] Using bspline fallback (pos_cmd stream stale)")[m
+ [m
+[31m-            # Type mask: Position + Yaw (Ignore velocity, acceleration, yaw_rate)[m
+[31m-            target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m[32m            if self.current_pose is None:[m
+[32m+[m[32m                return[m
+ [m
+[31m-            q = quaternion_from_euler(0, 0, self.latest_pos_cmd.yaw)[m
+[31m-            pose.pose.orientation.x = q[0][m
+[31m-            pose.pose.orientation.y = q[1][m
+[31m-            pose.pose.orientation.z = q[2][m
+[31m-            pose.pose.orientation.w = q[3][m
+[32m+[m[32m            # IMU-based backward acceleration warning for runtime verification.[m
+[32m+[m[32m            if self.latest_imu is not None and self.latest_imu.linear_acceleration.x < self.backward_imu_accel_threshold:[m
+[32m+[m[32m                rospy.logwarn_throttle([m
+[32m+[m[32m                    1.0,[m
+[32m+[m[32m                    "[Bridge] IMU indicates backward acceleration ax=%.2f m/s^2",[m
+[32m+[m[32m                    self.latest_imu.linear_acceleration.x,[m
+[32m+[m[32m                )[m
+[32m+[m
+[32m+[m[32m            candidate_x, candidate_y, candidate_z, replanned = self.enforce_forward_policy([m
+[32m+[m[32m                candidate_x,[m
+[32m+[m[32m                candidate_y,[m
+[32m+[m[32m                candidate_z,[m
+[32m+[m[32m                cmd_vx,[m
+[32m+[m[32m                cmd_vy,[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m            # Enforce arena physical 3D wall bounds (fwd in [-0.3m, 13.5m], lat in [-6.2m, 6.2m], Z in [0.4m, 1.8m])[m
+[32m+[m[32m            candidate_x, candidate_y, candidate_z = self.clamp_to_arena_bounds(candidate_x, candidate_y, candidate_z)[m
+[32m+[m
+[32m+[m[32m            if self.current_pose is not None and self.origin_locked:[m
+[32m+[m[32m                curr_fwd, _ = self.get_forward_lateral(self.current_pose.pose.position.x, self.current_pose.pose.position.y)[m
+[32m+[m[32m                if curr_fwd < self.gate_entry_forward_distance:[m
+[32m+[m[32m                    dx = candidate_x - self.current_pose.pose.position.x[m
+[32m+[m[32m                    dy = candidate_y - self.current_pose.pose.position.y[m
+[32m+[m[32m                    dist = math.hypot(dx, dy)[m
+[32m+[m[32m                    if dist > self.gate_entry_max_step and dist > 1e-3:[m
+[32m+[m[32m                        scale = self.gate_entry_max_step / dist[m
+[32m+[m[32m                        candidate_x = self.current_pose.pose.position.x + dx * scale[m
+[32m+[m[32m                        candidate_y = self.current_pose.pose.position.y + dy * scale[m
+[32m+[m[32m                    candidate_z = max(self.gate_entry_min_z, min(1.8, candidate_z))[m
+[32m+[m[32m                    candidate_x, candidate_y, candidate_z = self.clamp_to_arena_bounds(candidate_x, candidate_y, candidate_z)[m
+[32m+[m
+[32m+[m[32m            if (not self.localization_healthy) or (self.localization_rejected_count >= self.localization_reject_threshold):[m
+[32m+[m[32m                rospy.logwarn_throttle([m
+[32m+[m[32m                    1.0,[m
+[32m+[m[32m                    "[Bridge] Localization unhealthy (healthy=%s rejected=%d). Holding position.",[m
+[32m+[m[32m                    str(self.localization_healthy),[m
+[32m+[m[32m                    self.localization_rejected_count,[m
+[32m+[m[32m                )[m
+[32m+[m[32m                target, pose = self.build_hover_target()[m
+[32m+[m[32m                if target is None:[m
+[32m+[m[32m                    return[m
+[32m+[m[32m                pose.pose.position = target.position[m
+[32m+[m[32m                self.pub_setpoint_pose.publish(pose)[m
+[32m+[m[32m                return[m
+[32m+[m
+[32m+[m[32m            if self.command_is_safe(candidate_x, candidate_y):[m
+[32m+[m[32m                if self.enable_yaw_align_gate:[m
+[32m+[m[32m                    built = self.build_heading_first_target(candidate_x, candidate_y, candidate_z)[m
+[32m+[m[32m                    if built is None:[m
+[32m+[m[32m                        return[m
+[32m+[m
+[32m+[m[32m                    target, pose, moving_forward, desired_yaw, yaw_error = built[m
+[32m+[m
+[32m+[m[32m                    if not moving_forward:[m
+[32m+[m[32m                        rospy.logwarn_throttle(1.0, f"[Bridge] Yaw-align first: error={yaw_error:.2f}rad desired={desired_yaw:.2f}rad")[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                        rospy.loginfo_throttle(2.0, f"[Bridge] Heading-first step: forward target ({target.position.x:.2f}, {target.position.y:.2f})")[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    # Direct tracking mode: do not block translation on yaw alignment.[m
+[32m+[m[32m                    target.position.x = candidate_x[m
+[32m+[m[32m                    target.position.y = candidate_y[m
+[32m+[m[32m                    target.position.z = min(1.5, max(1.0, candidate_z))[m
+[32m+[m[32m                    target.velocity.x = 0.0[m
+[32m+[m[32m                    target.velocity.y = 0.0[m
+[32m+[m[32m                    target.velocity.z = 0.0[m
+[32m+[m[32m                    target.yaw = cmd_yaw[m
+[32m+[m[32m                    target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m
+[32m+[m[32m                    q = quaternion_from_euler(0, 0, cmd_yaw)[m
+[32m+[m[32m                    pose.pose.position.x = target.position.x[m
+[32m+[m[32m                    pose.pose.position.y = target.position.y[m
+[32m+[m[32m                    pose.pose.position.z = target.position.z[m
+[32m+[m[32m                    pose.pose.orientation.x = q[0][m
+[32m+[m[32m                    pose.pose.orientation.y = q[1][m
+[32m+[m[32m                    pose.pose.orientation.z = q[2][m
+[32m+[m[32m                    pose.pose.orientation.w = q[3][m
+[32m+[m[32m                    rospy.loginfo_throttle(2.0, f"[Bridge] Direct-tracking target ({target.position.x:.2f}, {target.position.y:.2f}, {target.position.z:.2f})")[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                # During initial bootstrap, bias motion forward into the door corridor.[m
+[32m+[m[32m                in_bootstrap = self.bootstrap_started and (rospy.Time.now() - self.bootstrap_start_time).to_sec() < self.bootstrap_duration[m
+[32m+[m[32m                if self.enable_bootstrap_nudge and in_bootstrap and self.current_pose is not None and self.yaw_ref_locked:[m
+[32m+[m[32m                    forward_x = self.current_pose.pose.position.x + self.bootstrap_forward_step * math.cos(self.yaw_ref)[m
+[32m+[m[32m                    forward_y = self.current_pose.pose.position.y + self.bootstrap_forward_step * math.sin(self.yaw_ref)[m
+[32m+[m[32m                    built = self.build_heading_first_target(forward_x, forward_y, candidate_z)[m
+[32m+[m[32m                    if built is None:[m
+[32m+[m[32m                        return[m
+[32m+[m[32m                    target, pose, moving_forward, desired_yaw, yaw_error = built[m
+[32m+[m[32m                    rospy.logwarn_throttle(1.0, "[Bridge] Bootstrap heading-first nudge applied")[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    # Hold current position and yaw if candidate is unsafe.[m
+[32m+[m[32m                    target = PositionTarget()[m
+[32m+[m[32m                    target.header.stamp = rospy.Time.now()[m
+[32m+[m[32m                    target.header.frame_id = "map"[m
+[32m+[m[32m                    target.coordinate_frame = PositionTarget.FRAME_LOCAL_NED[m
+[32m+[m[32m                    target.position.x = self.current_pose.pose.position.x[m
+[32m+[m[32m                    target.position.y = self.current_pose.pose.position.y[m
+[32m+[m[32m                    target.position.z = self.current_pose.pose.position.z[m
+[32m+[m[32m                    target.velocity.x = 0.0[m
+[32m+[m[32m                    target.velocity.y = 0.0[m
+[32m+[m[32m                    target.velocity.z = 0.0[m
+[32m+[m[32m                    hold_yaw = self.get_current_yaw()[m
+[32m+[m[32m                    target.yaw = hold_yaw[m
+[32m+[m[32m                    target.type_mask = 8 + 16 + 32 + 64 + 128 + 256 + 2048[m
+[32m+[m
+[32m+[m[32m                    pose = PoseStamped()[m
+[32m+[m[32m                    pose.header = target.header[m
+[32m+[m[32m                    pose.pose.position = target.position[m
+[32m+[m[32m                    q = quaternion_from_euler(0, 0, hold_yaw)[m
+[32m+[m[32m                    pose.pose.orientation.x = q[0][m
+[32m+[m[32m                    pose.pose.orientation.y = q[1][m
+[32m+[m[32m                    pose.pose.orientation.z = q[2][m
+[32m+[m[32m                    pose.pose.orientation.w = q[3][m
+[32m+[m[32m                    rospy.logwarn_throttle(1.0, "[Bridge] Unsafe candidate blocked: holding position")[m
+         else:[m
+             if self.current_pose is None:[m
+                 return[m
+ [m
+[31m-            # Initial Standby / Hover Setpoint at 1.5m[m
+[32m+[m[32m            # Standby setpoint: if armed, climb to 1.5m hover; if disarmed, hold current pose[m
+             target.position.x = self.current_pose.pose.position.x[m
+             target.position.y = self.current_pose.pose.position.y[m
+[31m-            target.position.z = max(1.5, self.current_pose.pose.position.z)[m
+[32m+[m[32m            target.position.z = 1.5 if self.is_armed else self.current_pose.pose.position.z[m
+ [m
+             q = [[m
+                 self.current_pose.pose.orientation.x,[m
+[36m@@ -122,7 +824,7 @@[m [mclass FuelToMavrosBridge:[m
+ [m
+         pose.pose.position = target.position[m
+ [m
+[31m-        self.pub_setpoint_raw.publish(target)[m
+[32m+[m[32m        # Publish setpoint_position/local for rock-solid PX4 OFFBOARD position control[m
+         self.pub_setpoint_pose.publish(pose)[m
+ [m
+ if __name__ == '__main__':[m
+[1mdiff --git a/scripts/mission_manager.py b/scripts/mission_manager.py[m
+[1mindex 37616be0..c9726afc 100755[m
+[1m--- a/scripts/mission_manager.py[m
+[1m+++ b/scripts/mission_manager.py[m
+[36m@@ -8,7 +8,7 @@[m [mfrom sensor_msgs.msg import PointCloud2[m
+ import sensor_msgs.point_cloud2 as pc2[m
+ from std_msgs.msg import Bool[m
+ from mavros_msgs.msg import State[m
+[31m-from mavros_msgs.srv import SetMode, SetModeRequest[m
+[32m+[m[32mfrom mavros_msgs.srv import SetMode, SetModeRequest, CommandBool, CommandBoolRequest[m
+ [m
+ class GridMap:[m
+     def __init__(self, resolution=0.2, origin_x=-12.0, origin_y=-12.0, size_x=24.0, size_y=24.0):[m
+[36m@@ -189,6 +189,12 @@[m [mclass NidarMissionManager:[m
+         self.current_z = 0.0[m
+         self.pose_received = False[m
+         self.completed = False[m
+[32m+[m[32m        self.completed_count = 0[m
+[32m+[m[32m        self.landing_initiated = False[m
+[32m+[m[32m        self.min_exploration_time = rospy.get_param('~min_exploration_time', 120.0)[m
+[32m+[m[32m        self.min_exploration_distance = rospy.get_param('~min_exploration_distance', 2.0)[m
+[32m+[m[32m        self.allow_timeout_rth = rospy.get_param('~allow_timeout_rth', False)[m
+[32m+[m[32m        self.publish_setpoints = rospy.get_param('~publish_setpoints', False)[m
+ [m
+         self.grid_map = GridMap()[m
+         self.waypoints = [][m
+[36m@@ -201,15 +207,23 @@[m [mclass NidarMissionManager:[m
+         rospy.Subscriber('/exploration_completed', Bool, self.completed_callback)[m
+         rospy.Subscriber('/sdf_map/occupancy_all', PointCloud2, self.map_callback)[m
+ [m
+[31m-        self.setpoint_pub = rospy.Publisher('/mavros/setpoint_position/local', PoseStamped, queue_size=10)[m
+[32m+[m[32m        self.setpoint_pub = None[m
+[32m+[m[32m        if self.publish_setpoints:[m
+[32m+[m[32m            self.setpoint_pub = rospy.Publisher('/mavros/setpoint_position/local', PoseStamped, queue_size=10)[m
+         self.completed_pub = rospy.Publisher('/exploration_completed', Bool, queue_size=1)[m
+ [m
+         # MAVROS mode service[m
+         rospy.wait_for_service('/mavros/set_mode')[m
+         self.set_mode_client = rospy.ServiceProxy('/mavros/set_mode', SetMode)[m
+[32m+[m[32m        rospy.wait_for_service('/mavros/cmd/arming')[m
+[32m+[m[32m        self.arming_client = rospy.ServiceProxy('/mavros/cmd/arming', CommandBool)[m
+ [m
+         self.rate = rospy.Rate(20)[m
+         rospy.loginfo("[Mission Manager] Initialized successfully.")[m
+[32m+[m[32m        if self.publish_setpoints:[m
+[32m+[m[32m            rospy.logwarn("[Mission Manager] Setpoint publication is ENABLED (can conflict with bridge).")[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            rospy.loginfo("[Mission Manager] Setpoint publication is DISABLED; node acts as mission state machine.")[m
+ [m
+     def state_callback(self, msg):[m
+         self.current_mode = msg.mode[m
+[36m@@ -228,12 +242,57 @@[m [mclass NidarMissionManager:[m
+ [m
+     def completed_callback(self, msg):[m
+         if msg.data and not self.completed:[m
+[31m-            rospy.loginfo("[Mission Manager] Exploration completed signal received!")[m
+[31m-            self.completed = True[m
+[32m+[m[32m            # Enforce initial grace period before accepting completion[m
+[32m+[m[32m            elapsed = (rospy.Time.now() - self.start_time).to_sec() if self.start_time else 0.0[m
+[32m+[m[32m            if elapsed < self.min_exploration_time:[m
+[32m+[m[32m                rospy.logwarn_throttle(2.0, f"[Mission Manager] Ignored early exploration completed signal (elapsed: {elapsed:.1f}s < {self.min_exploration_time:.1f}s)")[m
+[32m+[m[32m                return[m
+[32m+[m
+[32m+[m[32m            if self.home_x is not None and self.home_y is not None:[m
+[32m+[m[32m                traveled = math.hypot(self.current_x - self.home_x, self.current_y - self.home_y)[m
+[32m+[m[32m                if traveled < self.min_exploration_distance:[m
+[32m+[m[32m                    rospy.logwarn_throttle(2.0, f"[Mission Manager] Ignored completion: traveled distance too small ({traveled:.2f}m < {self.min_exploration_distance:.2f}m)")[m
+[32m+[m[32m                    self.completed_count = 0[m
+[32m+[m[32m                return[m
+[32m+[m
+[32m+[m[32m            self.completed_count += 1[m
+[32m+[m[32m            rospy.loginfo(f"[Mission Manager] Exploration completed signal received ({self.completed_count}/3)...")[m
+[32m+[m[32m            if self.completed_count >= 3:[m
+[32m+[m[32m                rospy.loginfo("[Mission Manager] Exploration completion confirmed by 3 consecutive signals!")[m
+[32m+[m[32m                self.completed = True[m
+ [m
+     def map_callback(self, msg):[m
+         self.grid_map.update_from_pc(msg)[m
+ [m
+[32m+[m[32m    def disarm_vehicle(self, retries=20, delay_sec=0.5):[m
+[32m+[m[32m        disarm_request = CommandBoolRequest()[m
+[32m+[m[32m        disarm_request.value = False[m
+[32m+[m
+[32m+[m[32m        for attempt in range(retries):[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                response = self.arming_client.call(disarm_request)[m
+[32m+[m[32m                if response.success:[m
+[32m+[m[32m                    rospy.loginfo("[Mission Manager] Disarm command accepted.")[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    rospy.logwarn(f"[Mission Manager] Disarm command rejected on attempt {attempt + 1}/{retries}.")[m
+[32m+[m[32m            except rospy.ServiceException as e:[m
+[32m+[m[32m                rospy.logerr(f"[Mission Manager] Disarm service call failed on attempt {attempt + 1}/{retries}: {e}")[m
+[32m+[m
+[32m+[m[32m            state = None[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                state = rospy.wait_for_message('/mavros/state', State, timeout=2.0)[m
+[32m+[m[32m            except rospy.ROSException:[m
+[32m+[m[32m                pass[m
+[32m+[m
+[32m+[m[32m            if state is not None and not state.armed:[m
+[32m+[m[32m                rospy.loginfo("[Mission Manager] Vehicle is disarmed.")[m
+[32m+[m[32m                return True[m
+[32m+[m
+[32m+[m[32m            rospy.sleep(delay_sec)[m
+[32m+[m
+[32m+[m[32m        rospy.logwarn("[Mission Manager] Vehicle still armed after disarm retries.")[m
+[32m+[m[32m        return False[m
+[32m+[m
+     def run(self):[m
+         while not rospy.is_shutdown():[m
+             if self.state == "MONITOR":[m
+[36m@@ -243,10 +302,14 @@[m [mclass NidarMissionManager:[m
+                         self.start_time = now[m
+                         rospy.loginfo(f"[Mission Manager] Exploration timer started at ROS time: {now.to_sec():.2f}s")[m
+ [m
+[31m-                max_duration = rospy.get_param('~max_exploration_time', 90.0)[m
+[32m+[m[32m                max_duration = rospy.get_param('~max_exploration_time', 600.0)[m
+                 elapsed = (rospy.Time.now() - self.start_time).to_sec() if self.start_time else 0.0[m
+ [m
+[31m-                if self.completed or (self.start_time and elapsed >= max_duration):[m
+[32m+[m[32m                timeout_reached = self.start_time and elapsed >= max_duration[m
+[32m+[m[32m                if timeout_reached and not self.allow_timeout_rth:[m
+[32m+[m[32m                    rospy.logwarn_throttle(5.0, f"[Mission Manager] Max exploration duration reached ({max_duration:.1f}s) but timeout RTH is disabled; waiting for explicit exploration completion.")[m
+[32m+[m
+[32m+[m[32m                if self.completed or (timeout_reached and self.allow_timeout_rth):[m
+                     if not self.completed:[m
+                         rospy.loginfo(f"[Mission Manager] Max exploration duration ({max_duration:.1f}s) reached!")[m
+                         self.completed = True[m
+[36m@@ -287,7 +350,10 @@[m [mclass NidarMissionManager:[m
+                     target_pose.pose.position.y = target_y[m
+                     target_pose.pose.position.z = 1.5  # Maintain height in all cases[m
+                     target_pose.pose.orientation.w = 1.0[m
+[31m-                    self.setpoint_pub.publish(target_pose)[m
+[32m+[m[32m                    if self.publish_setpoints:[m
+[32m+[m[32m                        self.setpoint_pub.publish(target_pose)[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                        rospy.logwarn_throttle(2.0, "[Mission Manager] RTH setpoint suppressed (publish_setpoints=false)")[m
+ [m
+                     # Check distance to waypoint[m
+                     dx = self.current_x - target_x[m
+[36m@@ -318,7 +384,10 @@[m [mclass NidarMissionManager:[m
+                 target_pose.pose.position.y = self.home_y[m
+                 target_pose.pose.position.z = self.land_target_z[m
+                 target_pose.pose.orientation.w = 1.0[m
+[31m-                self.setpoint_pub.publish(target_pose)[m
+[32m+[m[32m                if self.publish_setpoints:[m
+[32m+[m[32m                    self.setpoint_pub.publish(target_pose)[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    rospy.logwarn_throttle(2.0, "[Mission Manager] Landing setpoint suppressed (publish_setpoints=false)")[m
+ [m
+                 rospy.loginfo_throttle(1.0, f"[Mission Manager] Precision Landing: Target Z={self.land_target_z:.2f}m, Current Z={self.current_z:.2f}m")[m
+ [m
+[36m@@ -328,12 +397,25 @@[m [mclass NidarMissionManager:[m
+                     land_set_mode = SetModeRequest()[m
+                     land_set_mode.custom_mode = 'AUTO.LAND'[m
+                     try:[m
+[31m-                        self.set_mode_client.call(land_set_mode)[m
+[31m-                        rospy.loginfo("[Mission Manager] AUTO.LAND command sent successfully. Exiting.")[m
+[32m+[m[32m                        response = self.set_mode_client.call(land_set_mode)[m
+[32m+[m[32m                        if response.mode_sent:[m
+[32m+[m[32m                            rospy.loginfo("[Mission Manager] AUTO.LAND command sent successfully.")[m
+[32m+[m[32m                        else:[m
+[32m+[m[32m                            rospy.logwarn("[Mission Manager] AUTO.LAND command was not accepted by PX4.")[m
+[32m+[m[32m                        rospy.sleep(2.0)[m
+[32m+[m[32m                        self.disarm_vehicle()[m
+[32m+[m[32m                        rospy.loginfo("[Mission Manager] Landing sequence complete. Exiting.")[m
+                         break[m
+                     except rospy.ServiceException as e:[m
+                         rospy.logerr(f"[Mission Manager] Service call failed: {e}")[m
+ [m
+[32m+[m[32m                if self.current_mode == 'AUTO.LAND' and self.current_z <= 0.35 and not self.landing_initiated:[m
+[32m+[m[32m                    rospy.logwarn("[Mission Manager] Low-altitude landing detected. Forcing disarm workflow.")[m
+[32m+[m[32m                    self.landing_initiated = True[m
+[32m+[m[32m                    self.disarm_vehicle(retries=30, delay_sec=0.5)[m
+[32m+[m[32m                    rospy.loginfo("[Mission Manager] Forced landing disarm workflow complete.")[m
+[32m+[m[32m                    break[m
+[32m+[m
+             self.rate.sleep()[m
+ [m
+ if __name__ == '__main__':[m
+[1mdiff --git a/scripts/relay_odometry.py b/scripts/relay_odometry.py[m
+[1mindex 711b0e37..bf884e1e 100755[m
+[1m--- a/scripts/relay_odometry.py[m
+[1m+++ b/scripts/relay_odometry.py[m
+[36m@@ -2,18 +2,157 @@[m
+ import rospy[m
+ from nav_msgs.msg import Odometry[m
+ from geometry_msgs.msg import PoseStamped[m
+[32m+[m[32mfrom mavros_msgs.msg import State[m
+[32m+[m[32mfrom std_msgs.msg import Bool, Int32[m
+[32m+[m[32mfrom tf.transformations import euler_from_quaternion, quaternion_from_euler[m
+[32m+[m
+[32m+[m[32mis_armed = False[m
+[32m+[m[32morigin_initialized = False[m
+[32m+[m[32morigin_x = 0.0[m
+[32m+[m[32morigin_y = 0.0[m
+[32m+[m[32morigin_z = 0.0[m
+[32m+[m[32mlast_pub_x = None[m
+[32m+[m[32mlast_pub_y = None[m
+[32m+[m[32mlast_pub_z = None[m
+[32m+[m[32mlast_pub_time = None[m
+[32m+[m[32mrejected_count = 0[m
+[32m+[m[32mhealthy_streak = 0[m
+[32m+[m
+[32m+[m[32mdef state_callback(msg):[m
+[32m+[m[32m    global is_armed[m
+[32m+[m[32m    is_armed = msg.armed[m
+ [m
+ def odometry_callback(msg):[m
+[32m+[m[32m    global origin_initialized, origin_x, origin_y, origin_z[m
+[32m+[m[32m    global last_pub_x, last_pub_y, last_pub_z, last_pub_time[m
+[32m+[m[32m    global rejected_count, healthy_streak[m
+[32m+[m
+     pose_msg = PoseStamped()[m
+[31m-    pose_msg.header = msg.header[m
+[31m-    # MAVROS expects the frame_id to be 'map' or 'odom'[m
+[32m+[m[32m    # Update stamp to current ROS time to eliminate latency rejection in PX4 EKF2[m
+[32m+[m[32m    pose_msg.header.stamp = rospy.Time.now()[m
+     pose_msg.header.frame_id = "map"[m
+[32m+[m
+     pose_msg.pose = msg.pose.pose[m
+[32m+[m
+[32m+[m[32m    # Anchor external vision to a local origin to avoid large absolute frame offsets.[m
+[32m+[m[32m    if use_relative_origin and not origin_initialized:[m
+[32m+[m[32m        origin_x = msg.pose.pose.position.x[m
+[32m+[m[32m        origin_y = msg.pose.pose.position.y[m
+[32m+[m[32m        origin_z = msg.pose.pose.position.z[m
+[32m+[m[32m        origin_initialized = True[m
+[32m+[m[32m        rospy.loginfo("[relay_odometry] Vision origin initialized at x=%.2f y=%.2f z=%.2f", origin_x, origin_y, origin_z)[m
+[32m+[m
+[32m+[m[32m    if use_relative_origin and origin_initialized:[m
+[32m+[m[32m        pose_msg.pose.position.x = msg.pose.pose.position.x - origin_x[m
+[32m+[m[32m        pose_msg.pose.position.y = msg.pose.pose.position.y - origin_y[m
+[32m+[m[32m        pose_msg.pose.position.z = msg.pose.pose.position.z - origin_z[m
+[32m+[m
+[32m+[m[32m    x = pose_msg.pose.position.x[m
+[32m+[m[32m    y = pose_msg.pose.position.y[m
+[32m+[m
+[32m+[m[32m    # Clamp vision-z fed to EKF to prevent sudden estimator altitude jumps.[m
+[32m+[m[32m    z = pose_msg.pose.position.z[m
+[32m+[m[32m    if z < vision_z_min:[m
+[32m+[m[32m        z = vision_z_min[m
+[32m+[m[32m    elif z > vision_z_max:[m
+[32m+[m[32m        z = vision_z_max[m
+[32m+[m
+[32m+[m[32m    if last_pub_z is not None and abs(z - last_pub_z) > vision_z_jump_warn:[m
+[32m+[m[32m        rospy.logwarn_throttle(1.0, "[relay_odometry] Large vision-z jump detected: %.2f -> %.2f", last_pub_z, z)[m
+[32m+[m
+[32m+[m[32m    pose_msg.pose.position.z = z[m
+[32m+[m
+[32m+[m[32m    now = rospy.Time.now().to_sec()[m
+[32m+[m[32m    if last_pub_time is not None:[m
+[32m+[m[32m        dt = max(1e-3, now - last_pub_time)[m
+[32m+[m[32m        dx = x - last_pub_x[m
+[32m+[m[32m        dy = y - last_pub_y[m
+[32m+[m[32m        dz = z - last_pub_z[m
+[32m+[m[32m        planar_jump = (dx * dx + dy * dy) ** 0.5[m
+[32m+[m[32m        speed = planar_jump / dt[m
+[32m+[m
+[32m+[m[32m        if planar_jump > vision_xy_jump_reject:[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, "[relay_odometry] Rejecting vision sample: planar jump %.2fm exceeds %.2fm", planar_jump, vision_xy_jump_reject)[m
+[32m+[m[32m            rejected_count += 1[m
+[32m+[m[32m            healthy_streak = 0[m
+[32m+[m[32m            last_pub_x = x[m
+[32m+[m[32m            last_pub_y = y[m
+[32m+[m[32m            last_pub_z = z[m
+[32m+[m[32m            last_pub_time = now[m
+[32m+[m[32m            pub_rejected.publish(Int32(data=rejected_count))[m
+[32m+[m[32m            pub_health.publish(Bool(data=(rejected_count < rejection_threshold)))[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        if speed > vision_speed_reject:[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, "[relay_odometry] Rejecting vision sample: speed %.2fm/s exceeds %.2fm/s", speed, vision_speed_reject)[m
+[32m+[m[32m            rejected_count += 1[m
+[32m+[m[32m            healthy_streak = 0[m
+[32m+[m[32m            last_pub_x = x[m
+[32m+[m[32m            last_pub_y = y[m
+[32m+[m[32m            last_pub_z = z[m
+[32m+[m[32m            last_pub_time = now[m
+[32m+[m[32m            pub_rejected.publish(Int32(data=rejected_count))[m
+[32m+[m[32m            pub_health.publish(Bool(data=(rejected_count < rejection_threshold)))[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m        if abs(dz) > vision_z_step_reject:[m
+[32m+[m[32m            rospy.logwarn_throttle(1.0, "[relay_odometry] Rejecting vision sample: z step %.2fm exceeds %.2fm", abs(dz), vision_z_step_reject)[m
+[32m+[m[32m            rejected_count += 1[m
+[32m+[m[32m            healthy_streak = 0[m
+[32m+[m[32m            last_pub_x = x[m
+[32m+[m[32m            last_pub_y = y[m
+[32m+[m[32m            last_pub_z = z[m
+[32m+[m[32m            last_pub_time = now[m
+[32m+[m[32m            pub_rejected.publish(Int32(data=rejected_count))[m
+[32m+[m[32m            pub_health.publish(Bool(data=(rejected_count < rejection_threshold)))[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m    last_pub_x = x[m
+[32m+[m[32m    last_pub_y = y[m
+[32m+[m[32m    last_pub_z = z[m
+[32m+[m[32m    last_pub_time = now[m
+[32m+[m
+[32m+[m[32m    healthy_streak += 1[m
+[32m+[m[32m    if healthy_streak >= 5:[m
+[32m+[m[32m        rejected_count = 0[m
+[32m+[m[32m    elif rejected_count > 0:[m
+[32m+[m[32m        rejected_count -= 1[m
+[32m+[m
+[32m+[m[32m    pub_rejected.publish(Int32(data=rejected_count))[m
+[32m+[m[32m    pub_health.publish(Bool(data=(rejected_count < rejection_threshold)))[m
+[32m+[m
+[32m+[m[32m    # Level roll/pitch when on ground to eliminate Preflight Fail: Attitude failure (roll)[m
+[32m+[m[32m    if not is_armed:[m
+[32m+[m[32m        q_raw = [[m
+[32m+[m[32m            msg.pose.pose.orientation.x,[m
+[32m+[m[32m            msg.pose.pose.orientation.y,[m
+[32m+[m[32m            msg.pose.pose.orientation.z,[m
+[32m+[m[32m            msg.pose.pose.orientation.w[m
+[32m+[m[32m        ][m
+[32m+[m[32m        _, _, yaw = euler_from_quaternion(q_raw)[m
+[32m+[m[32m        q_clean = quaternion_from_euler(0.0, 0.0, yaw)[m
+[32m+[m[32m        pose_msg.pose.orientation.x = q_clean[0][m
+[32m+[m[32m        pose_msg.pose.orientation.y = q_clean[1][m
+[32m+[m[32m        pose_msg.pose.orientation.z = q_clean[2][m
+[32m+[m[32m        pose_msg.pose.orientation.w = q_clean[3][m
+[32m+[m
+     pub.publish(pose_msg)[m
+ [m
+ if __name__ == '__main__':[m
+[31m-    rospy.init_node('odometry_relay_node')[m
+[32m+[m[32m    rospy.init_node('odometry_relay_node', anonymous=True)[m
+[32m+[m[32m    use_relative_origin = rospy.get_param('~use_relative_origin', True)[m
+[32m+[m[32m    vision_z_min = rospy.get_param('~vision_z_min', -5.0)[m
+[32m+[m[32m    vision_z_max = rospy.get_param('~vision_z_max', 10.0)[m
+[32m+[m[32m    vision_z_jump_warn = rospy.get_param('~vision_z_jump_warn', 0.6)[m
+[32m+[m[32m    vision_xy_jump_reject = rospy.get_param('~vision_xy_jump_reject', 1.2)[m
+[32m+[m[32m    vision_speed_reject = rospy.get_param('~vision_speed_reject', 4.5)[m
+[32m+[m[32m    vision_z_step_reject = rospy.get_param('~vision_z_step_reject', 0.35)[m
+[32m+[m[32m    rejection_threshold = rospy.get_param('~rejection_threshold', 8)[m
+     pub = rospy.Publisher('/mavros/vision_pose/pose', PoseStamped, queue_size=10)[m
+[31m-    rospy.Subscriber('/Fast_LIO/odometry', Odometry, odometry_callback)[m
+[31m-    rospy.loginfo("Relaying /Fast_LIO/odometry to /mavros/vision_pose/pose")[m
+[32m+[m[32m    pub_health = rospy.Publisher('/localization/healthy', Bool, queue_size=5)[m
+[32m+[m[32m    pub_rejected = rospy.Publisher('/localization/rejected_count', Int32, queue_size=5)[m
+[32m+[m[32m    rospy.Subscriber('/mavros/state', State, state_callback, queue_size=1)[m
+[32m+[m[32m    rospy.Subscriber('/Fast_LIO/odometry', Odometry, odometry_callback, queue_size=10)[m
+[32m+[m[32m    rospy.loginfo("Relaying /Fast_LIO/odometry to /mavros/vision_pose/pose with EKF2 stability enhancements (relative_origin=%s, z_clamp=[%.2f, %.2f], xy_jump<=%.2f, speed<=%.2f, z_step<=%.2f, reject_threshold=%d)",[m
+[32m+[m[32m                  str(use_relative_origin), vision_z_min, vision_z_max, vision_xy_jump_reject, vision_speed_reject, vision_z_step_reject, rejection_threshold)[m
+     rospy.spin()[m
+[1mdiff --git a/scripts/test_takeoff.sh b/scripts/test_takeoff.sh[m
+[1mindex 16472529..653808b3 100755[m
+[1m--- a/scripts/test_takeoff.sh[m
+[1m+++ b/scripts/test_takeoff.sh[m
+[36m@@ -1,13 +1,30 @@[m
+ #!/bin/bash[m
+ GUI_ARG=${1:-true}[m
+ SPAWN_X=${2:-0.0}[m
+[31m-SPAWN_Y=${3:-0.0}[m
+[32m+[m[32mSPAWN_Y=${3:--7.5}[m
+ SPAWN_Z=${4:-0.1}[m
+[31m-SPAWN_YAW=${5:-0.0}[m
+[32m+[m[32mSPAWN_YAW=${5:-1.5708}[m
+ echo "Starting clean simulation (GUI=${GUI_ARG}) at position (X=${SPAWN_X}, Y=${SPAWN_Y}, Z=${SPAWN_Z}, Yaw=${SPAWN_YAW})..."[m
+ [m
+ # Ensure clean slate[m
+ killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true[m
+[32m+[m[32mpkill -f fuel_to_mavros_bridge.py 2>/dev/null || true[m
+[32m+[m[32mpkill -f mission_manager.py 2>/dev/null || true[m
+[32m+[m[32mpkill -f map_2d_slicer_node.py 2>/dev/null || true[m
+[32m+[m[32mpkill -f survivor_detector_node.py 2>/dev/null || true[m
+[32m+[m[32mpkill -f relay_odometry.py 2>/dev/null || true[m
+[32m+[m[32mpkill -f odometry_relay_node 2>/dev/null || true[m
+[32m+[m[32mpkill -f exploration_node 2>/dev/null || true[m
+[32m+[m[32mpkill -f traj_server 2>/dev/null || true[m
+[32m+[m[32mpkill -f fast_lio 2>/dev/null || true[m
+[32m+[m[32mpkill -f FAST_LIO 2>/dev/null || true[m
+[32m+[m[32mpkill -f waypoint_generator 2>/dev/null || true[m
+[32m+[m[32mpkill -f "rosbag record" 2>/dev/null || true[m
+[32m+[m[32mpkill -f nidar_rosbag_recorder 2>/dev/null || true[m
+[32m+[m[32mpkill -f forward_only_validator 2>/dev/null || true[m
+[32m+[m[32mpkill -f collect_crash_timeline.sh 2>/dev/null || true[m
+[32m+[m[32mpkill -f phase0_collect_mapping.sh 2>/dev/null || true[m
+[32m+[m[32mpkill -f phase0_tf_audit.py 2>/dev/null || true[m
+ rm -rf /home/developer/.ros/dataman /home/developer/.ros/eeprom /home/developer/.ros/parameters.bson /home/developer/.ros/parameters_backup.bson[m
+ [m
+ # ROS-time aware sleep function for slower-than-real-time SITL simulation[m
+[36m@@ -41,6 +58,12 @@[m [mecho "Launching FAST-LIO2 Mapping & RViz..."[m
+ roslaunch /home/developer/NIDAR/launch/fast_lio/nidar_mapping.launch rviz:=$GUI_ARG > /tmp/fast_lio.log 2>&1 &[m
+ sim_sleep 2[m
+ [m
+[32m+[m[32mENABLE_PHASE0_AUDIT=${ENABLE_PHASE0_AUDIT:-false}[m
+[32m+[m[32mPHASE0_AUDIT_DURATION=${PHASE0_AUDIT_DURATION:-180}[m
+[32m+[m[32mif [ "$ENABLE_PHASE0_AUDIT" = "true" ]; then[m
+[32m+[m[32m    rm -rf /tmp/phase0_audit /tmp/phase0_audit.log[m
+[32m+[m[32mfi[m
+[32m+[m
+ echo "Starting Odometry Relay..."[m
+ /home/developer/NIDAR/scripts/relay_odometry.py > /tmp/relay.log 2>&1 &[m
+ sim_sleep 2[m
+[36m@@ -84,22 +107,6 @@[m [mfor i in {1..300}; do[m
+     sim_sleep 1[m
+ done[m
+ [m
+[31m-echo "============================================================"[m
+[31m-echo "Starting FUEL MAVROS Offboard Control Bridge & Mission Manager..."[m
+[31m-echo "============================================================"[m
+[31m-PYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/fuel_to_mavros_bridge.py > /tmp/bridge.log 2>&1 &[m
+[31m-PYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/mission_manager.py > /tmp/mission_manager.log 2>&1 &[m
+[31m-PYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/map_2d_slicer_node.py > /tmp/map_2d.log 2>&1 &[m
+[31m-PYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/survivor_detector_node.py > /tmp/survivors.log 2>&1 &[m
+[31m-/home/developer/NIDAR/scripts/record_mission.sh > /tmp/rosbag.log 2>&1 &[m
+[31m-[m
+[31m-verify_topic "/mavros/setpoint_position/local" 15[m
+[31m-if [ $? -ne 0 ]; then[m
+[31m-    echo "Setpoint topic is inactive. Exiting."[m
+[31m-    killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true[m
+[31m-    exit 1[m
+[31m-fi[m
+[31m-[m
+ echo "Setting MAVROS Mode to AUTO.TAKEOFF for Arming..."[m
+ rosrun mavros mavsys mode -c AUTO.TAKEOFF[m
+ sim_sleep 1[m
+[36m@@ -116,13 +123,45 @@[m [mfor i in {1..30}; do[m
+     echo "Arming rejected (EKF2 aligning), retrying in 2 seconds..."[m
+ done[m
+ [m
+[31m-echo "Initiating Takeoff to 1.5m..."[m
+[31m-rosrun mavros mavcmd takeoffcur 0 0 1.5 >/dev/null 2>&1[m
+[31m-sim_sleep 4[m
+[32m+[m[32mecho "============================================================"[m
+[32m+[m[32mecho "Starting FUEL MAVROS Offboard Control Bridge & Mission Manager..."[m
+[32m+[m[32mecho "============================================================"[m
+[32m+[m[32mENABLE_CRASH_TIMELINE=${ENABLE_CRASH_TIMELINE:-true}[m
+[32m+[m[32mif [ "$ENABLE_CRASH_TIMELINE" = "true" ]; then[m
+[32m+[m[32m    echo "Starting crash timeline collector..."[m
+[32m+[m[32m    /home/developer/NIDAR/scripts/collect_crash_timeline.sh /tmp/crash_timeline > /tmp/crash_timeline.log 2>&1 &[m
+[32m+[m[32mfi[m
+[32m+[m[32mENFORCE_FORWARD_ONLY=${ENFORCE_FORWARD_ONLY:-false}[m
+[32m+[m[32mPYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/fuel_to_mavros_bridge.py _enforce_forward_only:=$ENFORCE_FORWARD_ONLY _safety_inflation_cells:=1 __name:=fuel_to_mavros_bridge > /tmp/bridge.log 2>&1 &[m
+[32m+[m[32mPYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/mission_manager.py _publish_setpoints:=false > /tmp/mission_manager.log 2>&1 &[m
+[32m+[m[32mPYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/map_2d_slicer_node.py > /tmp/map_2d.log 2>&1 &[m
+[32m+[m[32mPYTHONUNBUFFERED=1 /home/developer/NIDAR/scripts/survivor_detector_node.py > /tmp/survivors.log 2>&1 &[m
+[32m+[m[32m/home/developer/NIDAR/scripts/record_mission.sh > /tmp/rosbag.log 2>&1 &[m
+ [m
+[31m-echo "Switching MAVROS to OFFBOARD Mode..."[m
+[32m+[m[32msim_sleep 1[m
+[32m+[m[32mecho "Switching MAVROS to OFFBOARD Mode to initiate immediate climb..."[m
+ rosrun mavros mavsys mode -c OFFBOARD[m
+[31m-sim_sleep 2[m
+[32m+[m[32msim_sleep 1[m
+[32m+[m
+[32m+[m[32mecho "Climbing to takeoff altitude (1.5m)..."[m
+[32m+[m[32mpython3 -c "[m
+[32m+[m[32mimport rospy[m
+[32m+[m[32mfrom geometry_msgs.msg import PoseStamped[m
+[32m+[m[32mrospy.init_node('takeoff_alt_wait', anonymous=True)[m
+[32m+[m[32mstart = rospy.Time.now()[m
+[32m+[m[32mwhile not rospy.is_shutdown() and (rospy.Time.now() - start).to_sec() < 30.0:[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        msg = rospy.wait_for_message('/mavros/local_position/pose', PoseStamped, timeout=1.0)[m
+[32m+[m[32m        if msg.pose.position.z >= 1.2:[m
+[32m+[m[32m            print(f'Takeoff altitude reached: {msg.pose.position.z:.2f}m!')[m
+[32m+[m[32m            break[m
+[32m+[m[32m    except Exception:[m
+[32m+[m[32m        pass[m
+[32m+[m[32m    rospy.sleep(0.5)[m
+[32m+[m[32m"[m
+[32m+[m
+[32m+[m[32mecho "Pre-flight climb complete. Holding stable forward orientation for mapping..."[m
+[32m+[m[32msim_sleep 1[m
+ [m
+ echo "============================================================"[m
+ echo "Launching FUEL Autonomous Exploration Stack..."[m
+[36m@@ -131,9 +170,35 @@[m [mroslaunch /home/developer/NIDAR/launch/nidar_fuel.launch > /tmp/fuel.log 2>&1 &[m
+ FUEL_PID=$![m
+ sim_sleep 5[m
+ [m
+[31m-echo "Publishing trigger to start autonomous exploration..."[m
+[31m-rostopic pub -1 /waypoint_generator/waypoints nav_msgs/Path "header: {seq: 0, stamp: {secs: 0, nsecs: 0}, frame_id: 'camera_init'}, poses: [{header: {seq: 0, stamp: {secs: 0, nsecs: 0}, frame_id: 'camera_init'}, pose: {position: {x: 0.0, y: 0.0, z: 1.5}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}]" > /tmp/trigger.log 2>&1[m
+[31m-sim_sleep 2[m
+[32m+[m[32mif [ "$ENABLE_PHASE0_AUDIT" = "true" ]; then[m
+[32m+[m[32m    echo "Starting Phase-0 mapping audit collector (${PHASE0_AUDIT_DURATION}s)..."[m
+[32m+[m[32m    /home/developer/NIDAR/scripts/phase0_collect_mapping.sh /tmp/phase0_audit "$PHASE0_AUDIT_DURATION" > /tmp/phase0_audit.log 2>&1 &[m
+[32m+[m[32mfi[m
+[32m+[m
+[32m+[m[32mecho "Publishing trigger to start autonomous exploration at (X=${SPAWN_X}, Y=${SPAWN_Y}, Z=1.5)..."[m
+[32m+[m[32mpython3 -c "[m
+[32m+[m[32mimport rospy[m
+[32m+[m[32mfrom nav_msgs.msg import Path[m
+[32m+[m[32mfrom geometry_msgs.msg import PoseStamped[m
+[32m+[m[32mrospy.init_node('exploration_trigger_publisher', anonymous=True)[m
+[32m+[m[32mpub = rospy.Publisher('/waypoint_generator/waypoints', Path, queue_size=1)[m
+[32m+[m[32mrate = rospy.Rate(2)[m
+[32m+[m[32mfor i in range(20):[m
+[32m+[m[32m    p = Path()[m
+[32m+[m[32m    p.header.frame_id = 'camera_init'[m
+[32m+[m[32m    p.header.stamp = rospy.Time.now()[m
+[32m+[m[32m    ps = PoseStamped()[m
+[32m+[m[32m    ps.header = p.header[m
+[32m+[m[32m    ps.pose.position.x = ${SPAWN_X}[m
+[32m+[m[32m    ps.pose.position.y = ${SPAWN_Y}[m
+[32m+[m[32m    ps.pose.position.z = 1.5[m
+[32m+[m[32m    ps.pose.orientation.w = 1.0[m
+[32m+[m[32m    p.poses.append(ps)[m
+[32m+[m[32m    pub.publish(p)[m
+[32m+[m[32m    rospy.loginfo(f'[Trigger] Published waypoint trigger {i + 1}/20')[m
+[32m+[m[32m    rate.sleep()[m
+[32m+[m[32mprint('[Trigger] Waypoint path trigger stream finished.')[m
+[32m+[m[32m" > /tmp/trigger.log 2>&1[m
+ sim_sleep 2[m
+ [m
+ echo "============================================================"[m
+[36m@@ -146,7 +211,7 @@[m [mfor i in {1..300}; do[m
+     POS_Z=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "z:" | awk '{print $2}')[m
+     MODE=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_arm', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.mode)" 2>/dev/null)[m
+     [m
+[31m-    echo "[Telemetry t+$(($i*5))s] X: ${POS_X}m, Y: ${POS_Y}m, Z: ${POS_Z}m | Mode: ${MODE} | Armed: ${ARMED}"[m
+[32m+[m[32m    echo "[Telemetry t+$(($i*5))s] Pose: (${POS_X}, ${POS_Y}, ${POS_Z})m | Mode: ${MODE} | Armed: ${ARMED}"[m
+     [m
+     if [ "$ARMED" != "True" ] && [ $i -gt 4 ]; then[m
+         echo "Drone has landed and disarmed. Mission completed successfully!"[m

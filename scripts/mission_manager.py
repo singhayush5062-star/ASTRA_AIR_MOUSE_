@@ -8,7 +8,7 @@ from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2 as pc2
 from std_msgs.msg import Bool
 from mavros_msgs.msg import State
-from mavros_msgs.srv import SetMode, SetModeRequest
+from mavros_msgs.srv import SetMode, SetModeRequest, CommandBool, CommandBoolRequest
 
 class GridMap:
     def __init__(self, resolution=0.2, origin_x=-12.0, origin_y=-12.0, size_x=24.0, size_y=24.0):
@@ -189,6 +189,12 @@ class NidarMissionManager:
         self.current_z = 0.0
         self.pose_received = False
         self.completed = False
+        self.completed_count = 0
+        self.landing_initiated = False
+        self.min_exploration_time = rospy.get_param('~min_exploration_time', 120.0)
+        self.min_exploration_distance = rospy.get_param('~min_exploration_distance', 2.0)
+        self.allow_timeout_rth = rospy.get_param('~allow_timeout_rth', False)
+        self.publish_setpoints = rospy.get_param('~publish_setpoints', False)
 
         self.grid_map = GridMap()
         self.waypoints = []
@@ -201,15 +207,23 @@ class NidarMissionManager:
         rospy.Subscriber('/exploration_completed', Bool, self.completed_callback)
         rospy.Subscriber('/sdf_map/occupancy_all', PointCloud2, self.map_callback)
 
-        self.setpoint_pub = rospy.Publisher('/mavros/setpoint_position/local', PoseStamped, queue_size=10)
+        self.setpoint_pub = None
+        if self.publish_setpoints:
+            self.setpoint_pub = rospy.Publisher('/mavros/setpoint_position/local', PoseStamped, queue_size=10)
         self.completed_pub = rospy.Publisher('/exploration_completed', Bool, queue_size=1)
 
         # MAVROS mode service
         rospy.wait_for_service('/mavros/set_mode')
         self.set_mode_client = rospy.ServiceProxy('/mavros/set_mode', SetMode)
+        rospy.wait_for_service('/mavros/cmd/arming')
+        self.arming_client = rospy.ServiceProxy('/mavros/cmd/arming', CommandBool)
 
         self.rate = rospy.Rate(20)
         rospy.loginfo("[Mission Manager] Initialized successfully.")
+        if self.publish_setpoints:
+            rospy.logwarn("[Mission Manager] Setpoint publication is ENABLED (can conflict with bridge).")
+        else:
+            rospy.loginfo("[Mission Manager] Setpoint publication is DISABLED; node acts as mission state machine.")
 
     def state_callback(self, msg):
         self.current_mode = msg.mode
@@ -228,11 +242,56 @@ class NidarMissionManager:
 
     def completed_callback(self, msg):
         if msg.data and not self.completed:
-            rospy.loginfo("[Mission Manager] Exploration completed signal received!")
-            self.completed = True
+            # Enforce initial grace period before accepting completion
+            elapsed = (rospy.Time.now() - self.start_time).to_sec() if self.start_time else 0.0
+            if elapsed < self.min_exploration_time:
+                rospy.logwarn_throttle(2.0, f"[Mission Manager] Ignored early exploration completed signal (elapsed: {elapsed:.1f}s < {self.min_exploration_time:.1f}s)")
+                return
+
+            if self.home_x is not None and self.home_y is not None:
+                traveled = math.hypot(self.current_x - self.home_x, self.current_y - self.home_y)
+                if traveled < self.min_exploration_distance:
+                    rospy.logwarn_throttle(2.0, f"[Mission Manager] Ignored completion: traveled distance too small ({traveled:.2f}m < {self.min_exploration_distance:.2f}m)")
+                    self.completed_count = 0
+                return
+
+            self.completed_count += 1
+            rospy.loginfo(f"[Mission Manager] Exploration completed signal received ({self.completed_count}/3)...")
+            if self.completed_count >= 3:
+                rospy.loginfo("[Mission Manager] Exploration completion confirmed by 3 consecutive signals!")
+                self.completed = True
 
     def map_callback(self, msg):
         self.grid_map.update_from_pc(msg)
+
+    def disarm_vehicle(self, retries=20, delay_sec=0.5):
+        disarm_request = CommandBoolRequest()
+        disarm_request.value = False
+
+        for attempt in range(retries):
+            try:
+                response = self.arming_client.call(disarm_request)
+                if response.success:
+                    rospy.loginfo("[Mission Manager] Disarm command accepted.")
+                else:
+                    rospy.logwarn(f"[Mission Manager] Disarm command rejected on attempt {attempt + 1}/{retries}.")
+            except rospy.ServiceException as e:
+                rospy.logerr(f"[Mission Manager] Disarm service call failed on attempt {attempt + 1}/{retries}: {e}")
+
+            state = None
+            try:
+                state = rospy.wait_for_message('/mavros/state', State, timeout=2.0)
+            except rospy.ROSException:
+                pass
+
+            if state is not None and not state.armed:
+                rospy.loginfo("[Mission Manager] Vehicle is disarmed.")
+                return True
+
+            rospy.sleep(delay_sec)
+
+        rospy.logwarn("[Mission Manager] Vehicle still armed after disarm retries.")
+        return False
 
     def run(self):
         while not rospy.is_shutdown():
@@ -243,10 +302,14 @@ class NidarMissionManager:
                         self.start_time = now
                         rospy.loginfo(f"[Mission Manager] Exploration timer started at ROS time: {now.to_sec():.2f}s")
 
-                max_duration = rospy.get_param('~max_exploration_time', 90.0)
+                max_duration = rospy.get_param('~max_exploration_time', 600.0)
                 elapsed = (rospy.Time.now() - self.start_time).to_sec() if self.start_time else 0.0
 
-                if self.completed or (self.start_time and elapsed >= max_duration):
+                timeout_reached = self.start_time and elapsed >= max_duration
+                if timeout_reached and not self.allow_timeout_rth:
+                    rospy.logwarn_throttle(5.0, f"[Mission Manager] Max exploration duration reached ({max_duration:.1f}s) but timeout RTH is disabled; waiting for explicit exploration completion.")
+
+                if self.completed or (timeout_reached and self.allow_timeout_rth):
                     if not self.completed:
                         rospy.loginfo(f"[Mission Manager] Max exploration duration ({max_duration:.1f}s) reached!")
                         self.completed = True
@@ -287,7 +350,10 @@ class NidarMissionManager:
                     target_pose.pose.position.y = target_y
                     target_pose.pose.position.z = 1.5  # Maintain height in all cases
                     target_pose.pose.orientation.w = 1.0
-                    self.setpoint_pub.publish(target_pose)
+                    if self.publish_setpoints:
+                        self.setpoint_pub.publish(target_pose)
+                    else:
+                        rospy.logwarn_throttle(2.0, "[Mission Manager] RTH setpoint suppressed (publish_setpoints=false)")
 
                     # Check distance to waypoint
                     dx = self.current_x - target_x
@@ -318,7 +384,10 @@ class NidarMissionManager:
                 target_pose.pose.position.y = self.home_y
                 target_pose.pose.position.z = self.land_target_z
                 target_pose.pose.orientation.w = 1.0
-                self.setpoint_pub.publish(target_pose)
+                if self.publish_setpoints:
+                    self.setpoint_pub.publish(target_pose)
+                else:
+                    rospy.logwarn_throttle(2.0, "[Mission Manager] Landing setpoint suppressed (publish_setpoints=false)")
 
                 rospy.loginfo_throttle(1.0, f"[Mission Manager] Precision Landing: Target Z={self.land_target_z:.2f}m, Current Z={self.current_z:.2f}m")
 
@@ -328,11 +397,24 @@ class NidarMissionManager:
                     land_set_mode = SetModeRequest()
                     land_set_mode.custom_mode = 'AUTO.LAND'
                     try:
-                        self.set_mode_client.call(land_set_mode)
-                        rospy.loginfo("[Mission Manager] AUTO.LAND command sent successfully. Exiting.")
+                        response = self.set_mode_client.call(land_set_mode)
+                        if response.mode_sent:
+                            rospy.loginfo("[Mission Manager] AUTO.LAND command sent successfully.")
+                        else:
+                            rospy.logwarn("[Mission Manager] AUTO.LAND command was not accepted by PX4.")
+                        rospy.sleep(2.0)
+                        self.disarm_vehicle()
+                        rospy.loginfo("[Mission Manager] Landing sequence complete. Exiting.")
                         break
                     except rospy.ServiceException as e:
                         rospy.logerr(f"[Mission Manager] Service call failed: {e}")
+
+                if self.current_mode == 'AUTO.LAND' and self.current_z <= 0.35 and not self.landing_initiated:
+                    rospy.logwarn("[Mission Manager] Low-altitude landing detected. Forcing disarm workflow.")
+                    self.landing_initiated = True
+                    self.disarm_vehicle(retries=30, delay_sec=0.5)
+                    rospy.loginfo("[Mission Manager] Forced landing disarm workflow complete.")
+                    break
 
             self.rate.sleep()
 

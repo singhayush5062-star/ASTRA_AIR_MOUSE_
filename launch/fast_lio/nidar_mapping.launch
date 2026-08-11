@@ -25,6 +25,16 @@
         <remap from="/Odometry" to="/Fast_LIO/odometry" />
     </node>
 
+    <!-- Publish actual drone trajectory path from FAST-LIO odometry -->
+    <node pkg="fast_lio" type="flight_path_publisher.py" name="flight_path_publisher" output="screen">
+        <param name="odom_topic" value="/Fast_LIO/odometry" />
+        <param name="path_topic" value="/flight_path" />
+        <param name="frame_id" value="camera_init" />
+        <param name="max_points" value="15000" />
+        <param name="min_translation" value="0.02" />
+        <param name="min_yaw" value="0.01" />
+    </node>
+
     <!-- RViz -->
     <group if="$(arg rviz)">
         <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d /home/developer/NIDAR/config/nidar_lidar.rviz" />

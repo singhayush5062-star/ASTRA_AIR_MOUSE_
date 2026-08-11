@@ -18,12 +18,12 @@
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
 
-    <!-- Bounded exploration box tailored for indoor warehouse environment -->
-    <arg name="box_min_x" value="-15.0"/>
-    <arg name="box_min_y" value="-15.0"/>
-    <arg name="box_min_z" value="0.2"/>
-    <arg name="box_max_x" value="15.0"/>
-    <arg name="box_max_y" value="15.0"/>
+    <!-- Bounded exploration box in local relative frame (Spawn is Y=0.0; Door is Y=-0.3m; Warehouse Hall is Y=0 to 13.5m) -->
+    <arg name="box_min_x" value="-6.5"/>
+    <arg name="box_min_y" value="-0.3"/>
+    <arg name="box_min_z" value="0.8"/>
+    <arg name="box_max_x" value="6.5"/>
+    <arg name="box_max_y" value="13.5"/>
     <arg name="box_max_z" value="1.8"/>
 
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
@@ -37,12 +37,16 @@
     <arg name="fy" value="387.229248046875"/>
 
     <!-- Enforce Phase 4 safety constraints -->
-    <arg name="max_vel" value="1.0"/>
-    <arg name="max_acc" value="0.3"/>
+    <arg name="max_vel" value="1.5"/>
+    <arg name="max_acc" value="0.8"/>
   </include>
 
   <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->
   <param name="exploration_node/map_ros/frame_id" value="camera_init"/>
+
+    <!-- Bridge PX4/MAVROS local frame (map) to FAST-LIO world frame (camera_init). -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"
+      args="0 0 0 0 0 0 map camera_init"/>
 
   <!-- FUEL B-Spline Trajectory Server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">

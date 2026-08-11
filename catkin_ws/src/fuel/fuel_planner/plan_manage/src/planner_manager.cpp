@@ -265,7 +265,12 @@ bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d& start_pt,
 
 void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d>& tour,
     const Eigen::Vector3d& cur_vel, const Eigen::Vector3d& cur_acc, const double& time_lb) {
-  if (tour.empty()) ROS_ERROR("Empty path to traj planner");
+  // Protect trajectory generation from invalid tours. A single-point tour can
+  // trigger downstream matrix assertions in PolynomialTraj::waypointsTraj.
+  if (tour.size() < 2) {
+    ROS_WARN_THROTTLE(1.0, "planExploreTraj received short tour (size=%zu); keep previous trajectory", tour.size());
+    return;
+  }
 
   // Generate traj through waypoints-based method
   const int pt_num = tour.size();
@@ -274,8 +279,12 @@ void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d>& tour,
 
   Eigen::Vector3d zero(0, 0, 0);
   Eigen::VectorXd times(pt_num - 1);
-  for (int i = 0; i < pt_num - 1; ++i)
-    times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
+  for (int i = 0; i < pt_num - 1; ++i) {
+    double dist = (pos.row(i + 1) - pos.row(i)).norm();
+    // Keep segment duration strictly positive to avoid singular systems when
+    // duplicated points appear in the exploration tour.
+    times(i) = std::max(0.1, dist / (pp_.max_vel_ * 0.5));
+  }
 
   PolynomialTraj init_traj;
   PolynomialTraj::waypointsTraj(pos, cur_vel, zero, cur_acc, zero, times, init_traj);

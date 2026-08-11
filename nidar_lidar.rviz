@@ -68,17 +68,26 @@ Visualization Manager:
       Use rainbow: true
       Value: true
     - Class: rviz/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
         All Frames Enabled: true
       Marker Scale: 1
       Name: TF
-      Show Arrows: true
-      Show Axes: true
-      Show Names: true
+      Show Arrows: false
+      Show Axes: false
+      Show Names: false
       Tree:
         {}
+      Value: false
+    - Alpha: 1
+      Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /planning/travel_traj
+      Name: PlannedTrajectory
+      Namespaces:
+        {}
+      Queue Size: 100
       Value: true
     - Alpha: 1
       Class: rviz/RobotModel

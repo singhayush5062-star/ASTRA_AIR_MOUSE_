@@ -1,0 +1,21 @@
+<launch>
+  <!-- Main NIDAR Entry Detection Module (EDM) & FUEL Autonomous Exploration Launch File -->
+
+  <arg name="door_min_width" default="0.50"/>
+  <arg name="door_max_width" default="1.20"/>
+  <arg name="target_door_width" default="1.00"/>
+  <arg name="confidence_threshold" default="0.70"/>
+  <arg name="stability_required_cycles" default="10"/>
+
+  <!-- Launch FUEL Autonomous Exploration Stack (FIESTA, exploration_node, traj_server) -->
+  <include file="$(find launch)/../launch/nidar_fuel.launch"/>
+
+  <!-- Entry Detection Module Node (Perception-driven gate entry before FUEL) -->
+  <node pkg="scripts" type="entry_detection_module.py" name="entry_detection_module" output="screen">
+    <param name="door_min_width" value="$(arg door_min_width)"/>
+    <param name="door_max_width" value="$(arg door_max_width)"/>
+    <param name="target_door_width" value="$(arg target_door_width)"/>
+    <param name="confidence_threshold" value="$(arg confidence_threshold)"/>
+    <param name="stability_required_cycles" value="$(arg stability_required_cycles)"/>
+  </node>
+</launch>

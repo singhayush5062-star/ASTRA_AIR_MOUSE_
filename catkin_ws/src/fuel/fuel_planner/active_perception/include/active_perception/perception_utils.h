@@ -41,6 +41,8 @@ private:
   double left_angle_, right_angle_, top_angle_, max_dist_, vis_dist_;
   // Normal vectors of camera FOV planes in camera frame
   Vector3d n_top_, n_bottom_, n_left_, n_right_;
+  // Whether horizontal coverage is full (360 deg)
+  bool full_horizontal_;
   // Transform between camera and body
   Eigen::Matrix4d T_cb_, T_bc_;
   // FOV vertices in body frame
