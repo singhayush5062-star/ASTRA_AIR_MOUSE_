@@ -45,7 +45,6 @@ void FastExplorationFSM::init(ros::NodeHandle& nh) {
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 10);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 10);
   bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 10);
-  completed_pub_ = nh.advertise<std_msgs::Bool>("/exploration_completed", 1);
 }
 
 void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
@@ -71,9 +70,6 @@ void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
 
     case FINISH: {
       ROS_INFO_THROTTLE(1.0, "finish exploration.");
-      std_msgs::Bool msg;
-      msg.data = true;
-      completed_pub_.publish(msg);
       break;
     }
 
@@ -108,9 +104,6 @@ void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
         transitState(FINISH, "FSM");
         fd_->static_state_ = true;
         clearVisMarker();
-        std_msgs::Bool msg;
-        msg.data = true;
-        completed_pub_.publish(msg);
       } else if (res == FAIL) {
         // Still in PLAN_TRAJ state, keep replanning
         ROS_WARN("plan fail");

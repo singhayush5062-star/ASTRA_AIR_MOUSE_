@@ -10,8 +10,6 @@ PerceptionUtils::PerceptionUtils(ros::NodeHandle& nh) {
   nh.param("perception_utils/max_dist", max_dist_, -1.0);
   nh.param("perception_utils/vis_dist", vis_dist_, -1.0);
 
-  full_horizontal_ = (left_angle_ >= M_PI - 1e-3 && right_angle_ >= M_PI - 1e-3);
-
   n_top_ << 0.0, sin(M_PI_2 - top_angle_), cos(M_PI_2 - top_angle_);
   n_bottom_ << 0.0, -sin(M_PI_2 - top_angle_), cos(M_PI_2 - top_angle_);
 
@@ -88,16 +86,8 @@ bool PerceptionUtils::insideFOV(const Vector3d& point) {
   if (dir.norm() > max_dist_) return false;
 
   dir.normalize();
-  // Always enforce top/bottom limits, but if horizontal coverage is full,
-  // skip the left/right plane tests to avoid excluding valid LiDAR returns.
-  // normals_ order: n_top_, n_bottom_, n_left_, n_right_
-  if (normals_.size() >= 2) {
-    if (dir.dot(normals_[0]) < 0.0) return false;
-    if (dir.dot(normals_[1]) < 0.0) return false;
-  }
-  if (!full_horizontal_ && normals_.size() >= 4) {
-    if (dir.dot(normals_[2]) < 0.0) return false;
-    if (dir.dot(normals_[3]) < 0.0) return false;
+  for (auto n : normals_) {
+    if (dir.dot(n) < 0.0) return false;
   }
   return true;
 }
@@ -105,18 +95,9 @@ bool PerceptionUtils::insideFOV(const Vector3d& point) {
 void PerceptionUtils::getFOVBoundingBox(Vector3d& bmin, Vector3d& bmax) {
   double left = yaw_ + left_angle_;
   double right = yaw_ - right_angle_;
-  vector<Vector3d> points;
-  if (full_horizontal_) {
-    // cover cardinal points for full horizontal FOV
-    points.push_back(pos_ + max_dist_ * Vector3d(1, 0, 0));
-    points.push_back(pos_ + max_dist_ * Vector3d(-1, 0, 0));
-    points.push_back(pos_ + max_dist_ * Vector3d(0, 1, 0));
-    points.push_back(pos_ + max_dist_ * Vector3d(0, -1, 0));
-  } else {
-    Vector3d left_pt = pos_ + max_dist_ * Vector3d(cos(left), sin(left), 0);
-    Vector3d right_pt = pos_ + max_dist_ * Vector3d(cos(right), sin(right), 0);
-    points = { left_pt, right_pt };
-  }
+  Vector3d left_pt = pos_ + max_dist_ * Vector3d(cos(left), sin(left), 0);
+  Vector3d right_pt = pos_ + max_dist_ * Vector3d(cos(right), sin(right), 0);
+  vector<Vector3d> points = { left_pt, right_pt };
   if (left > 0 && right < 0)
     points.push_back(pos_ + max_dist_ * Vector3d(1, 0, 0));
   else if (left > M_PI_2 && right < M_PI_2)

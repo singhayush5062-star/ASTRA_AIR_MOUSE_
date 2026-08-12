@@ -9,8 +9,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.7 REQUIRED)
 
-find_path(NLOPT_INCLUDE_DIR NAMES nlopt.hpp PATHS /usr/include /usr/local/include /usr/include/x86_64-linux-gnu)
-find_library(NLOPT_LIBRARY NAMES nlopt nlopt_cxx PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib)
+set(NLOPT_INCLUDE_DIR "/usr/local/include")  
+set(NLOPT_LIBRARY "/usr/local/lib/libnlopt.so")  
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp

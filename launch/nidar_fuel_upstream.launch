@@ -1,28 +1,28 @@
 <launch>
-  <!-- Workspace bounds and initial setpoints -->
-  <arg name="map_size_x" default="50.0"/>
-  <arg name="map_size_y" default="50.0"/>
-  <arg name="map_size_z" default="10.0"/>
+  <!-- Size of workspace -->
+  <arg name="map_size_x" value="50.0"/>
+  <arg name="map_size_y" value="50.0"/>
+  <arg name="map_size_z" value="10.0"/>
 
-  <arg name="init_x" default="0.0"/>
-  <arg name="init_y" default="0.0"/>
-  <arg name="init_z" default="1.5"/> 
+  <arg name="init_x" value="0.0"/>
+  <arg name="init_y" value="0.0"/>
+  <arg name="init_z" value="1.5"/>
 
-  <arg name="odom_topic" default="/Fast_LIO/odometry"/>
-  <arg name="cloud_topic" default="/cloud_registered"/>
-  <arg name="sensor_pose_topic" default="/mavros/vision_pose/pose"/>
+  <!-- Topics from FAST-LIO2 and MAVROS -->
+  <arg name="odom_topic" value="/Fast_LIO/odometry"/>
+  <arg name="cloud_topic" value="/cloud_registered"/>
+  <arg name="sensor_pose_topic" value="/mavros/vision_pose/pose"/>
 
-  <!-- NIDAR Exploration Manager & FIESTA Mapping -->
+  <!-- Upstream FUEL Exploration Algorithm -->
   <include file="$(find exploration_manager)/launch/algorithm.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
 
-    <!-- Bounded exploration box in local relative frame (Spawn is Y=0.0; Door is Y=-0.3m; Warehouse Hall is Y=0 to 13.5m) -->
-    <arg name="box_min_x" value="-6.5"/>
-    <arg name="box_min_y" value="-0.3"/>
+    <arg name="box_min_x" value="-6.0"/>
+    <arg name="box_min_y" value="-0.5"/>
     <arg name="box_min_z" value="0.8"/>
-    <arg name="box_max_x" value="6.5"/>
+    <arg name="box_max_x" value="6.0"/>
     <arg name="box_max_y" value="13.5"/>
     <arg name="box_max_z" value="1.8"/>
 
@@ -36,19 +36,18 @@
     <arg name="fx" value="387.229248046875"/>
     <arg name="fy" value="387.229248046875"/>
 
-    <!-- Enforce Phase 4 safety constraints -->
-    <arg name="max_vel" value="1.5"/>
-    <arg name="max_acc" value="0.8"/>
+    <arg name="max_vel" value="0.6"/>
+    <arg name="max_acc" value="0.3"/>
   </include>
 
   <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->
   <param name="exploration_node/map_ros/frame_id" value="camera_init"/>
 
-    <!-- Bridge PX4/MAVROS local frame (map) to FAST-LIO world frame (camera_init). -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"
-      args="0 0 0 0 0 0 map camera_init"/>
+  <!-- Static transform publisher: map -> camera_init -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"
+    args="0 0 0 0 0 0 map camera_init"/>
 
-  <!-- FUEL B-Spline Trajectory Server -->
+  <!-- Upstream FUEL Trajectory Server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">
     <remap from="/position_cmd" to="/planning/pos_cmd"/>
     <remap from="/odom_world" to="$(arg odom_topic)"/>
@@ -57,5 +56,13 @@
     <param name="traj_server/init_x" value="$(arg init_x)" type="double"/>
     <param name="traj_server/init_y" value="$(arg init_y)" type="double"/>
     <param name="traj_server/init_z" value="$(arg init_z)" type="double"/>
+  </node>
+
+  <!-- Upstream Waypoint Generator -->
+  <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~goal" to="/move_base_simple/goal"/>
+    <remap from="~traj_start_trigger" to="/traj_start_trigger"/>
+    <param name="waypoint_type" value="point"/>
   </node>
 </launch>

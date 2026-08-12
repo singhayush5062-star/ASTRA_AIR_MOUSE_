@@ -73,7 +73,7 @@
     <param name="map_ros/show_occ_time"  value="false"/>
     <param name="map_ros/show_esdf_time" value="false"/>
     <param name="map_ros/show_all_map" value="true"/>
-    <param name="map_ros/frame_id"      value="camera_init"/>
+    <param name="map_ros/frame_id"      value="world"/>
 
     <!-- Fsm -->
     <param name="fsm/thresh_replan1" value="0.5" type="double"/>
@@ -100,32 +100,32 @@
     <param name="exploration/tsp_dir" value="$(find lkh_tsp_solver)/resource" type="string"/>
     <param name="exploration/relax_time" value="1.0" type="double"/>
 
-    <param name="frontier/cluster_min" value="10" type="int"/>
-    <param name="frontier/cluster_size_xy" value="0.4" type="double"/>
-    <param name="frontier/cluster_size_z" value="1.5" type="double"/>
-    <param name="frontier/min_candidate_dist" value="0.3" type="double"/>
-    <param name="frontier/min_candidate_clearance" value="0.15" type="double"/>
+    <param name="frontier/cluster_min" value="100" type="int"/>
+    <param name="frontier/cluster_size_xy" value="2.0" type="double"/>
+    <param name="frontier/cluster_size_z" value="10.0" type="double"/>
+    <param name="frontier/min_candidate_dist" value="0.75" type="double"/>
+    <param name="frontier/min_candidate_clearance" value="0.21" type="double"/>
     <param name="frontier/candidate_dphi" value="$(eval 15 * 3.1415926 / 180.0)" type="double"/>
     <param name="frontier/candidate_rnum" value="3" type="int"/>
-    <param name="frontier/candidate_rmin" value="0.6" type="double"/>
+    <param name="frontier/candidate_rmin" value="1.5" type="double"/>
     <param name="frontier/candidate_rmax" value="2.5" type="double"/>
-    <param name="frontier/down_sample" value="2" type="int"/>
-    <param name="frontier/min_visib_num" value="5" type="int"/>
-    <param name="frontier/min_view_finish_fraction" value="0.2" type="double"/>
+    <param name="frontier/down_sample" value="3" type="int"/>;
+    <param name="frontier/min_visib_num" value="15" type="int"/>;
+    <param name="frontier/min_view_finish_fraction" value="0.2" type="double"/>;
 
     <!-- Perception utils -->
-    <param name="perception_utils/top_angle" value="0.2618" type="double"/>
-    <param name="perception_utils/left_angle" value="3.14159" type="double"/>
-    <param name="perception_utils/right_angle" value="3.14159" type="double"/>
-    <param name="perception_utils/max_dist" value="8.0" type="double"/>
-    <param name="perception_utils/vis_dist" value="0.5" type="double"/>
+    <param name="perception_utils/top_angle" value="0.56125" type="double"/>;
+    <param name="perception_utils/left_angle" value="0.69222" type="double"/>;
+    <param name="perception_utils/right_angle" value="0.68901" type="double"/>;
+    <param name="perception_utils/max_dist" value="4.5" type="double"/>;
+    <param name="perception_utils/vis_dist" value="1.0" type="double"/>;
 
 
     <param name="heading_planner/yaw_diff" value="$(eval 30 * 3.1415926 / 180.0)" type="double"/>
     <param name="heading_planner/half_vert_num" value="5" type="int"/>
     <param name="heading_planner/lambda1" value="2.0" type="double"/>
     <param name="heading_planner/lambda2" value="1.0" type="double"/>
-    <param name="heading_planner/max_yaw_rate" value="$(eval 90 * 3.1415926 / 180.0)" type="double"/>
+    <param name="heading_planner/max_yaw_rate" value="$(eval 10 * 3.1415926 / 180.0)" type="double"/>
     <param name="heading_planner/w" value="20000.0" type="double"/>
     <param name="heading_planner/weight_type" value="1" type="double"/>
 
