@@ -65,4 +65,7 @@
     <remap from="~traj_start_trigger" to="/traj_start_trigger"/>
     <param name="waypoint_type" value="point"/>
   </node>
+
+  <!-- Flight Envelope Guard Parameters -->
+  <rosparam command="load" file="/home/developer/NIDAR/config/flight_envelope_guard.yaml" />
 </launch>

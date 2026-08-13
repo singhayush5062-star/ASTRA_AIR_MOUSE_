@@ -9,6 +9,7 @@ echo "Starting clean FUEL exploration test (GUI=${GUI_ARG}) at position (X=${SPA
 # Ensure clean slate
 killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true
 pkill -f minimal_fuel_adapter.py 2>/dev/null || true
+pkill -f flight_envelope_guard.py 2>/dev/null || true
 pkill -f relay_odometry.py 2>/dev/null || true
 pkill -f exploration_node 2>/dev/null || true
 pkill -f traj_server 2>/dev/null || true
@@ -80,8 +81,8 @@ for i in {1..300}; do
     sim_sleep 1
 done
 
-echo "Starting Minimal FUEL -> MAVROS Trajectory Adapter..."
-/home/developer/NIDAR/scripts/minimal_fuel_adapter.py > /tmp/bridge.log 2>&1 &
+echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
+/home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
 sim_sleep 1
 
 echo "Setting MAVROS Mode to AUTO.TAKEOFF for Arming..."
@@ -155,7 +156,7 @@ sim_sleep 2
 
 echo "============================================================"
 echo "Clean Upstream FUEL Autonomous Exploration Running!"
-echo "Architecture: FAST-LIO2 -> Upstream FUEL -> Minimal Adapter -> MAVROS -> PX4"
+echo "Architecture: FAST-LIO2 -> Upstream FUEL -> Flight Envelope Guard -> MAVROS -> PX4"
 echo "============================================================"
 
 for i in {1..300}; do
