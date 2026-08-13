@@ -19,12 +19,12 @@
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
 
-    <arg name="box_min_x" value="-6.0"/>
-    <arg name="box_min_y" value="-0.5"/>
-    <arg name="box_min_z" value="0.8"/>
-    <arg name="box_max_x" value="6.0"/>
-    <arg name="box_max_y" value="13.5"/>
-    <arg name="box_max_z" value="1.8"/>
+    <arg name="box_min_x" value="-6.8"/>
+    <arg name="box_min_y" value="-6.8"/>
+    <arg name="box_min_z" value="1.46"/>
+    <arg name="box_max_x" value="6.8"/>
+    <arg name="box_max_y" value="6.8"/>
+    <arg name="box_max_z" value="1.54"/>
 
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
     <arg name="sensor_pose_topic" value="$(arg sensor_pose_topic)"/>
@@ -43,9 +43,11 @@
   <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->
   <param name="exploration_node/map_ros/frame_id" value="camera_init"/>
 
-  <!-- Static transform publisher: map -> camera_init -->
+  <!-- Static transform publishers: map -> camera_init and world -> camera_init -->
   <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"
     args="0 0 0 0 0 0 map camera_init"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="world_to_camera_init_tf"
+    args="0 0 0 0 0 0 world camera_init"/>
 
   <!-- Upstream FUEL Trajectory Server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">

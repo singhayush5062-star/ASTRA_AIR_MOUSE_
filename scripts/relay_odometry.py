@@ -140,7 +140,7 @@ def odometry_callback(msg):
 
 if __name__ == '__main__':
     rospy.init_node('odometry_relay_node', anonymous=True)
-    use_relative_origin = rospy.get_param('~use_relative_origin', True)
+    use_relative_origin = rospy.get_param('~use_relative_origin', False)
     vision_z_min = rospy.get_param('~vision_z_min', -5.0)
     vision_z_max = rospy.get_param('~vision_z_max', 10.0)
     vision_z_jump_warn = rospy.get_param('~vision_z_jump_warn', 0.6)
