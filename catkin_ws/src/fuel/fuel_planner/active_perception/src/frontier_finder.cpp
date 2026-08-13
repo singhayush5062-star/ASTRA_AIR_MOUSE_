@@ -420,6 +420,12 @@ void FrontierFinder::computeFrontiersToVisit() {
   std::cout << "\nnew num: " << new_num << ", new dormant: " << new_dormant_num << std::endl;
   std::cout << "to visit: " << frontiers_.size() << ", dormant: " << dormant_frontiers_.size()
             << std::endl;
+
+  int total_vp = 0;
+  for (const auto& ft : frontiers_) total_vp += ft.viewpoints_.size();
+  ROS_WARN_THROTTLE(2.0,
+      "[FUEL DIAG] Frontiers detected: %zu | Visitable: %zu | Dormant: %zu | Total Viewpoints: %d",
+      tmp_frontiers_.size() + dormant_frontiers_.size(), frontiers_.size(), dormant_frontiers_.size(), total_vp);
 }
 
 void FrontierFinder::getTopViewpointsInfo(
@@ -660,16 +666,27 @@ void FrontierFinder::findViewpoints(
 
 // Sample viewpoints around frontier's average position, check coverage to the frontier cells
 void FrontierFinder::sampleViewpoints(Frontier& frontier) {
+  int n_total = 0, n_out_map = 0, n_coll = 0, n_clearance = 0, n_low_vis = 0, n_acc = 0;
   // Evaluate sample viewpoints on circles, find ones that cover most cells
   for (double rc = candidate_rmin_, dr = (candidate_rmax_ - candidate_rmin_) / candidate_rnum_;
        rc <= candidate_rmax_ + 1e-3; rc += dr)
     for (double phi = -M_PI; phi < M_PI; phi += candidate_dphi_) {
+      n_total++;
       const Vector3d sample_pos = frontier.average_ + rc * Vector3d(cos(phi), sin(phi), 0);
 
       // Qualified viewpoint is in bounding box and in safe region
-      if (!edt_env_->sdf_map_->isInBox(sample_pos) ||
-          edt_env_->sdf_map_->getInflateOccupancy(sample_pos) == 1 || isNearUnknown(sample_pos))
+      if (!edt_env_->sdf_map_->isInBox(sample_pos)) {
+        n_out_map++;
         continue;
+      }
+      if (edt_env_->sdf_map_->getInflateOccupancy(sample_pos) == 1) {
+        n_coll++;
+        continue;
+      }
+      if (isNearUnknown(sample_pos)) {
+        n_clearance++;
+        continue;
+      }
 
       // Compute average yaw
       auto& cells = frontier.filtered_cells_;
@@ -688,10 +705,15 @@ void FrontierFinder::sampleViewpoints(Frontier& frontier) {
       if (visib_num > min_visib_num_) {
         Viewpoint vp = { sample_pos, avg_yaw, visib_num };
         frontier.viewpoints_.push_back(vp);
-        // int gain = findMaxGainYaw(sample_pos, frontier, sample_yaw);
+        n_acc++;
+      } else {
+        n_low_vis++;
       }
-      // }
     }
+
+  ROS_WARN_THROTTLE(2.0,
+      "[FUEL VIEWPOINT DIAG] Generated: %d | Accepted: %d | OutMap: %d | Coll: %d | Clearance: %d | LowVis: %d",
+      n_total, n_acc, n_out_map, n_coll, n_clearance, n_low_vis);
 }
 
 bool FrontierFinder::isFrontierCovered() {

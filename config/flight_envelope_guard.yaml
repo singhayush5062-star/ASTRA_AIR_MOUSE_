@@ -1,13 +1,26 @@
-# Flight Envelope Guard Configuration
+# Production-Grade Flight Envelope Guard Configuration
 # NIDAR 2026 AirMouse Flight Volume Containment
 
 flight_envelope_guard:
-  x_min: -7.0
-  x_max: 7.0
-  y_min: -7.0
-  y_max: 7.0
+  frame_id: "world"
+  
+  # Authoritative Gazebo World Frame Boundaries
+  world_x_min: -7.0
+  world_x_max: 7.0
+  world_y_min: -7.0
+  world_y_max: 7.0
+  world_z_min: 1.45
+  world_z_max: 1.55
+
+  # camera_init Frame Boundaries (FAST-LIO2 relative frame)
+  x_min: -6.0
+  x_max: 6.0
+  y_min: -0.5
+  y_max: 13.5
   z_min: 1.45
   z_max: 1.55
-  boundary_margin: 0.0
+
+  # Safety Margin & Rate
+  boundary_margin: 0.2
   publish_rate: 20.0
   default_altitude: 1.5

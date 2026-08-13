@@ -37,7 +37,8 @@ private:
   vector<Vector3d> normals_;
 
   /* Params */
-  // Sensing range of camera
+  // Sensing range of camera / LiDAR
+  bool is_lidar_;
   double left_angle_, right_angle_, top_angle_, max_dist_, vis_dist_;
   // Normal vectors of camera FOV planes in camera frame
   Vector3d n_top_, n_bottom_, n_left_, n_right_;

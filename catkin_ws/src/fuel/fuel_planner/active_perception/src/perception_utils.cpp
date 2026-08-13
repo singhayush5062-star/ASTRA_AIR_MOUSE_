@@ -4,6 +4,7 @@
 
 namespace fast_planner {
 PerceptionUtils::PerceptionUtils(ros::NodeHandle& nh) {
+  nh.param("perception_utils/is_lidar", is_lidar_, true);
   nh.param("perception_utils/top_angle", top_angle_, -1.0);
   nh.param("perception_utils/left_angle", left_angle_, -1.0);
   nh.param("perception_utils/right_angle", right_angle_, -1.0);
@@ -83,7 +84,19 @@ void PerceptionUtils::getFOV(vector<Vector3d>& list1, vector<Vector3d>& list2) {
 
 bool PerceptionUtils::insideFOV(const Vector3d& point) {
   Eigen::Vector3d dir = point - pos_;
-  if (dir.norm() > max_dist_) return false;
+  double dist = dir.norm();
+  if (dist > max_dist_) return false;
+
+  if (is_lidar_) {
+    // 360-degree horizontal LiDAR coverage: check vertical elevation angle
+    double dz = std::abs(dir.z());
+    double dxy = std::sqrt(dir.x() * dir.x() + dir.y() * dir.y());
+    if (dxy > 1e-4) {
+      double elevation = std::atan2(dz, dxy);
+      if (elevation > top_angle_) return false;
+    }
+    return true;
+  }
 
   dir.normalize();
   for (auto n : normals_) {

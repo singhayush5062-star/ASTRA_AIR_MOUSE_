@@ -6,7 +6,13 @@ void PolynomialTraj::waypointsTraj(const Eigen::MatrixXd& positions, const Eigen
                                    const Eigen::Vector3d& end_vel, const Eigen::Vector3d& start_acc,
                                    const Eigen::Vector3d& end_acc, const Eigen::VectorXd& times,
                                    PolynomialTraj& poly_traj) {
-  const int seg_num = times.size();
+  poly_traj.clear();
+  if (positions.rows() < 2 || times.size() < 1) {
+    return;
+  }
+
+  const int seg_num = std::min((int)times.size(), (int)positions.rows() - 1);
+  if (seg_num <= 0) return;
 
   // Helper to construct the mapping matrix
   const static auto Factorial = [](int x) {
@@ -15,6 +21,32 @@ void PolynomialTraj::waypointsTraj(const Eigen::MatrixXd& positions, const Eigen
       fac = fac * i;
     return fac;
   };
+
+  if (seg_num == 1) {
+    // Single segment trajectory solver (prevents Ct matrix indexing out of bounds)
+    Eigen::MatrixXd Ab = Eigen::MatrixXd::Zero(6, 6);
+    double t = times(0);
+    double t2 = t * t, t3 = t2 * t, t4 = t3 * t, t5 = t4 * t;
+
+    Ab << 1, 0, 0, 0, 0, 0,
+          0, 1, 0, 0, 0, 0,
+          0, 0, 2, 0, 0, 0,
+          1, t, t2, t3, t4, t5,
+          0, 1, 2 * t, 3 * t2, 4 * t3, 5 * t4,
+          0, 0, 2, 6 * t, 12 * t2, 20 * t3;
+
+    Eigen::VectorXd bx(6), by(6), bz(6);
+    bx << positions(0, 0), start_vel(0), start_acc(0), positions(1, 0), end_vel(0), end_acc(0);
+    by << positions(0, 1), start_vel(1), start_acc(1), positions(1, 1), end_vel(1), end_acc(1);
+    bz << positions(0, 2), start_vel(2), start_acc(2), positions(1, 2), end_vel(2), end_acc(2);
+
+    Eigen::VectorXd cx = Ab.colPivHouseholderQr().solve(bx);
+    Eigen::VectorXd cy = Ab.colPivHouseholderQr().solve(by);
+    Eigen::VectorXd cz = Ab.colPivHouseholderQr().solve(bz);
+
+    poly_traj.addSegment(cx, cy, cz, t);
+    return;
+  }
 
   // Boundary derivatives of each polynomial segment, the x,y,z axes are independent
   // { {p0, p1, v0, v1, a0, a1}, {p1, p2, v1, v2, a1, a2}... }

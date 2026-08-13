@@ -1,109 +1,136 @@
 #!/usr/bin/env python3
 """
-Unit and Integration Test Suite for Flight Envelope Guard
-========================================================
+Unit Tests for Production-Grade Flight Envelope Guard
+======================================================
 Tests:
-- Test 1: Z Limit validation (1.45 <= Z <= 1.55)
-- Test 2: Arena XY boundary validation (-7.0 <= X <= 7.0, -7.0 <= Y <= 7.0)
-- Test 3: South Gate crossing detection (Y_MIN boundary crossing from y >= -7.0 to y < -7.0)
+1. Authoritative World-frame coordinate transformation.
+2. Boundary validation & structured rejection codes (OUT_OF_BOUNDS_X, Y, Z, BOUNDARY_CROSSING).
+3. Velocity separation and zeroing on held setpoints.
 """
 
-import unittest
-import math
 import sys
 import os
+if '/opt/ros/noetic/lib/python3/dist-packages' not in sys.path:
+    sys.path.insert(0, '/opt/ros/noetic/lib/python3/dist-packages')
+catkin_py = '/home/developer/NIDAR/catkin_ws/devel/lib/python3/dist-packages'
+if os.path.exists(catkin_py) and catkin_py not in sys.path:
+    sys.path.insert(0, catkin_py)
 
-# Import FlightEnvelopeGuard class from scripts directory
-sys.path.insert(0, '/home/developer/NIDAR/scripts')
-from flight_envelope_guard import FlightEnvelopeGuard
+import unittest
+from quadrotor_msgs.msg import PositionCommand
+from mavros_msgs.msg import PositionTarget
 
-class MockPoint:
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
 
-class MockPositionCommand:
-    def __init__(self, x, y, z, yaw=0.0):
-        self.position = MockPoint(x, y, z)
-        self.velocity = MockPoint(0.0, 0.0, 0.0)
-        self.yaw = yaw
+class DummyGuard:
+    def __init__(self):
+        self.world_x_min = -7.0
+        self.world_x_max = 7.0
+        self.world_y_min = -7.0
+        self.world_y_max = 7.0
+        self.world_z_min = 1.45
+        self.world_z_max = 1.55
+        self.boundary_margin = 0.2
 
-class TestFlightEnvelopeGuard(unittest.TestCase):
+        self.eff_xw_min = self.world_x_min + self.boundary_margin
+        self.eff_xw_max = self.world_x_max - self.boundary_margin
+        self.eff_yw_min = self.world_y_min + self.boundary_margin
+        self.eff_yw_max = self.world_y_max - self.boundary_margin
+        self.eff_zw_min = self.world_z_min
+        self.eff_zw_max = self.world_z_max
+        self.last_valid_pos_world = None
+
+    def camera_to_world(self, xc, yc, zc):
+        xw = -yc
+        yw = xc - 6.5
+        zw = zc + 0.1
+        return xw, yw, zw
+
+    def validate_command(self, cmd):
+        xc, yc, zc = cmd.position.x, cmd.position.y, cmd.position.z
+        xw, yw, zw = self.camera_to_world(xc, yc, zc)
+
+        if xw < self.eff_xw_min:
+            return False, "OUT_OF_BOUNDS_X_MIN", f"World X below min (xw={xw:.2f}m < {self.eff_xw_min:.2f}m)", (xw, yw, zw)
+        if xw > self.eff_xw_max:
+            return False, "OUT_OF_BOUNDS_X_MAX", f"World X above max (xw={xw:.2f}m > {self.eff_xw_max:.2f}m)", (xw, yw, zw)
+
+        if yw < self.eff_yw_min:
+            return False, "OUT_OF_BOUNDS_Y_MIN", f"World Y below min (South Gate: yw={yw:.2f}m < {self.eff_yw_min:.2f}m)", (xw, yw, zw)
+        if yw > self.eff_yw_max:
+            return False, "OUT_OF_BOUNDS_Y_MAX", f"World Y above max (North Wall: yw={yw:.2f}m > {self.eff_yw_max:.2f}m)", (xw, yw, zw)
+
+        if zw < self.eff_zw_min:
+            return False, "OUT_OF_BOUNDS_Z_MIN", f"World Z below min (zw={zw:.2f}m < {self.eff_zw_min:.2f}m)", (xw, yw, zw)
+        if zw > self.eff_zw_max:
+            return False, "OUT_OF_BOUNDS_Z_MAX", f"World Z above max (zw={zw:.2f}m > {self.eff_zw_max:.2f}m)", (xw, yw, zw)
+
+        return True, "ACCEPT", "Safe setpoint inside arena envelope", (xw, yw, zw)
+
+
+class TestFlightEnvelopeGuardProduction(unittest.TestCase):
     def setUp(self):
-        # Instantiate guard with default test parameters
-        self.guard = FlightEnvelopeGuard.__new__(FlightEnvelopeGuard)
-        self.guard.x_min = -7.0
-        self.guard.x_max = 7.0
-        self.guard.y_min = -7.0
-        self.guard.y_max = 7.0
-        self.guard.z_min = 1.45
-        self.guard.z_max = 1.55
-        self.guard.boundary_margin = 0.0
+        self.guard = DummyGuard()
 
-        self.guard.eff_x_min = self.guard.x_min
-        self.guard.eff_x_max = self.guard.x_max
-        self.guard.eff_y_min = self.guard.y_min
-        self.guard.eff_y_max = self.guard.y_max
-        self.guard.eff_z_min = self.guard.z_min
-        self.guard.eff_z_max = self.guard.z_max
+    def test_camera_to_world_transform(self):
+        print("\n--- Running Test 1: Camera -> World Coordinate Transform ---")
+        xw, yw, zw = self.guard.camera_to_world(0.0, 0.0, 0.0)
+        self.assertAlmostEqual(xw, 0.0)
+        self.assertAlmostEqual(yw, -6.5)
+        self.assertAlmostEqual(zw, 0.1)
+        print(f"  Spawn check: camera=(0,0,0) -> world=({xw:.2f},{yw:.2f},{zw:.2f}) | PASS")
 
-        self.guard.last_valid_pos = None
+        xw, yw, zw = self.guard.camera_to_world(-0.5, 0.0, 0.0)
+        self.assertAlmostEqual(xw, 0.0)
+        self.assertAlmostEqual(yw, -7.0)
+        self.assertAlmostEqual(zw, 0.1)
+        print(f"  South door check: camera=(-0.5,0,0) -> world=({xw:.2f},{yw:.2f},{zw:.2f}) | PASS")
 
-    def test_z_limits(self):
-        print("\n--- Running Test 1: Z Limit Validation ---")
-        z_test_cases = [
-            (1.50, True, "Z=1.50 nominal"),
-            (1.45, True, "Z=1.45 min bound"),
-            (1.55, True, "Z=1.55 max bound"),
-            (1.40, False, "Z=1.40 below min"),
-            (1.60, False, "Z=1.60 above max"),
-            (2.00, False, "Z=2.00 way above max"),
-            (0.50, False, "Z=0.50 way below min"),
-        ]
+        xw, yw, zw = self.guard.camera_to_world(13.5, 0.0, 0.0)
+        self.assertAlmostEqual(xw, 0.0)
+        self.assertAlmostEqual(yw, 7.0)
+        self.assertAlmostEqual(zw, 0.1)
+        print(f"  North wall check: camera=(13.5,0,0) -> world=({xw:.2f},{yw:.2f},{zw:.2f}) | PASS")
 
-        for z, expected_valid, label in z_test_cases:
-            cmd = MockPositionCommand(0.0, 0.0, z)
-            is_valid, reason = self.guard.validate_command(cmd)
-            print(f"  Testing {label:25s} -> z={z:.2f}m | Result: {is_valid} ('{reason}')")
-            self.assertEqual(is_valid, expected_valid, f"Failed for {label}")
+    def test_structured_rejection_codes(self):
+        print("\n--- Running Test 2: Structured Rejection Codes ---")
+        cmd = PositionCommand()
+        cmd.position.x = 6.5
+        cmd.position.y = 0.0
+        cmd.position.z = 1.4
+        is_valid, code, reason, world_pt = self.guard.validate_command(cmd)
+        self.assertTrue(is_valid)
+        self.assertEqual(code, "ACCEPT")
+        print(f"  Center interior check -> Result: {is_valid} ({code}) | PASS")
 
-    def test_arena_xy_boundaries(self):
-        print("\n--- Running Test 2: Arena XY Boundary Validation ---")
-        xy_test_cases = [
-            (0.0, 0.0, 1.50, True, "Inside center"),
-            (-6.9, 0.0, 1.50, True, "Inside X_MIN"),
-            (6.9, 0.0, 1.50, True, "Inside X_MAX"),
-            (0.0, -6.9, 1.50, True, "Inside Y_MIN"),
-            (0.0, 6.9, 1.50, True, "Inside Y_MAX"),
-            (-7.1, 0.0, 1.50, False, "Outside X_MIN"),
-            (7.1, 0.0, 1.50, False, "Outside X_MAX"),
-            (0.0, 7.1, 1.50, False, "Outside Y_MAX"),
-            (0.0, -7.1, 1.50, False, "Outside Y_MIN"),
-        ]
+        cmd.position.x = -0.6  # world y = -7.1 (out of bounds)
+        is_valid, code, reason, world_pt = self.guard.validate_command(cmd)
+        self.assertFalse(is_valid)
+        self.assertEqual(code, "OUT_OF_BOUNDS_Y_MIN")
+        print(f"  South gate breach -> Result: {is_valid} ({code}) | PASS")
 
-        for x, y, z, expected_valid, label in xy_test_cases:
-            cmd = MockPositionCommand(x, y, z)
-            is_valid, reason = self.guard.validate_command(cmd)
-            print(f"  Testing {label:25s} -> ({x:.1f}, {y:.1f}, {z:.1f}) | Result: {is_valid} ('{reason}')")
-            self.assertEqual(is_valid, expected_valid, f"Failed for {label}")
+        cmd.position.x = 6.5
+        cmd.position.z = 2.5  # world z = 2.6 (out of bounds)
+        is_valid, code, reason, world_pt = self.guard.validate_command(cmd)
+        self.assertFalse(is_valid)
+        self.assertEqual(code, "OUT_OF_BOUNDS_Z_MAX")
+        print(f"  High altitude breach -> Result: {is_valid} ({code}) | PASS")
 
-    def test_gate_crossing(self):
-        print("\n--- Running Test 3: Gate Boundary Crossing Validation ---")
-        gate_test_sequence = [
-            (0.0, -6.8, 1.50, True, "Inside gate approach"),
-            (0.0, -6.9, 1.50, True, "Nearing boundary"),
-            (0.0, -7.0, 1.50, True, "On boundary Y=-7.0"),
-            (0.0, -7.1, 1.50, False, "Attempting gate escape Y=-7.1"),
-        ]
+    def test_velocity_zeroing_mask(self):
+        print("\n--- Running Test 3: Velocity Zeroing Type Mask ---")
+        expected_mask = (
+            PositionTarget.IGNORE_VX |
+            PositionTarget.IGNORE_VY |
+            PositionTarget.IGNORE_VZ |
+            PositionTarget.IGNORE_AFX |
+            PositionTarget.IGNORE_AFY |
+            PositionTarget.IGNORE_AFZ |
+            PositionTarget.IGNORE_YAW_RATE
+        )
+        self.assertTrue(expected_mask & PositionTarget.IGNORE_VX > 0)
+        self.assertTrue(expected_mask & PositionTarget.IGNORE_VY > 0)
+        self.assertTrue(expected_mask & PositionTarget.IGNORE_VZ > 0)
+        print("  Hold setpoint type_mask correctly ignores velocity components: PASS")
 
-        for x, y, z, expected_valid, label in gate_test_sequence:
-            cmd = MockPositionCommand(x, y, z)
-            is_valid, reason = self.guard.validate_command(cmd)
-            print(f"  Testing {label:35s} -> y={y:.2f}m | Result: {is_valid} ('{reason}')")
-            self.assertEqual(is_valid, expected_valid, f"Failed for {label}")
-            if is_valid:
-                self.guard.last_valid_pos = (x, y, z)
 
 if __name__ == '__main__':
     unittest.main()

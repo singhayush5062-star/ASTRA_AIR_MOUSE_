@@ -81,6 +81,9 @@ for i in {1..300}; do
     sim_sleep 1
 done
 
+echo "Loading Flight Envelope Guard parameters onto ROS Parameter Server..."
+rosparam load /home/developer/NIDAR/config/flight_envelope_guard.yaml /
+
 echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
 /home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
 sim_sleep 1
