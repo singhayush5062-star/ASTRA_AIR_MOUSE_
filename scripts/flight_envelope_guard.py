@@ -227,18 +227,22 @@ class FlightEnvelopeGuard:
             target.velocity = self.last_valid_command.velocity
             target.yaw = self.last_valid_command.yaw
         else:
-            # Pre-flight / Fallback initialization behavior
+            # Pre-flight / Fallback initialization behavior (strictly constrained to Z envelope)
+            target_z = min(max(self.default_altitude, self.eff_z_min), self.eff_z_max)
             if self.current_pose is not None:
-                target.position.x = self.current_pose.pose.position.x
-                target.position.y = self.current_pose.pose.position.y
-                target.position.z = max(self.default_altitude, self.current_pose.pose.position.z)
+                # Keep current X/Y position for hover hold, but constrain Z to legal envelope
+                eff_x = min(max(self.current_pose.pose.position.x, self.eff_x_min), self.eff_x_max)
+                eff_y = min(max(self.current_pose.pose.position.y, self.eff_y_min), self.eff_y_max)
+                target.position.x = eff_x
+                target.position.y = eff_y
+                target.position.z = target_z
                 q = self.current_pose.pose.orientation
                 _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
                 target.yaw = yaw
             else:
                 target.position.x = 0.0
                 target.position.y = 0.0
-                target.position.z = self.default_altitude
+                target.position.z = target_z
                 target.yaw = 1.5708
 
         self.pub_target.publish(target)

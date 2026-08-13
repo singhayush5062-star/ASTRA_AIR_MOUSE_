@@ -85,6 +85,9 @@ echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
 /home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
 sim_sleep 1
 
+echo "Setting PX4 Takeoff Altitude parameter to 1.5m..."
+rosrun mavros mavparam set MIS_TAKEOFF_ALT 1.5 >/dev/null 2>&1 || true
+
 echo "Setting MAVROS Mode to AUTO.TAKEOFF for Arming..."
 rosrun mavros mavsys mode -c AUTO.TAKEOFF
 sim_sleep 1
