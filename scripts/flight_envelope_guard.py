@@ -165,17 +165,17 @@ class FlightEnvelopeGuard:
         if zw > self.eff_zw_max:
             return False, "OUT_OF_BOUNDS_Z_MAX", f"World Z above max (zw={zw:.2f}m > {self.eff_zw_max:.2f}m)", (xw, yw, zw)
 
-        # 4. Trajectory boundary crossing check relative to last valid position
-        if self.last_valid_pos_world is not None:
-            prev_xw, prev_yw, _ = self.last_valid_pos_world
-            if prev_yw >= self.eff_yw_min and yw < self.eff_yw_min:
-                return False, "BOUNDARY_CROSSING_SOUTH", f"South gate crossing (prev_yw={prev_yw:.2f} -> yw={yw:.2f})", (xw, yw, zw)
-            if prev_yw <= self.eff_yw_max and yw > self.eff_yw_max:
-                return False, "BOUNDARY_CROSSING_NORTH", f"North wall crossing (prev_yw={prev_yw:.2f} -> yw={yw:.2f})", (xw, yw, zw)
-            if prev_xw >= self.eff_xw_min and xw < self.eff_xw_min:
-                return False, "BOUNDARY_CROSSING_WEST", f"West wall crossing (prev_xw={prev_xw:.2f} -> xw={xw:.2f})", (xw, yw, zw)
-            if prev_xw <= self.eff_xw_max and xw > self.eff_xw_max:
-                return False, "BOUNDARY_CROSSING_EAST", f"East wall crossing (prev_xw={prev_xw:.2f} -> xw={xw:.2f})", (xw, yw, zw)
+        # 4. Vehicle current pose warning (if pose available)
+        if self.current_pose is not None:
+            # Convert MAVROS local_position/pose (ENU: x=East, y=North) to camera_init frame (xc=North, yc=West)
+            c_xc = self.current_pose.pose.position.y
+            c_yc = -self.current_pose.pose.position.x
+            c_zc = self.current_pose.pose.position.z
+            c_xw, c_yw, c_zw = self.camera_to_world(c_xc, c_yc, c_zc)
+            if c_xw < self.eff_xw_min or c_xw > self.eff_xw_max or \
+               c_yw < self.eff_yw_min or c_yw > self.eff_yw_max or \
+               c_zw < self.eff_zw_min or c_zw > self.eff_zw_max:
+                rospy.logwarn_throttle(2.0, f"[FlightEnvelopeGuard] Vehicle current pose near/outside margin: world=({c_xw:.2f},{c_yw:.2f},{c_zw:.2f}) | guiding to safe interior setpoint")
 
         return True, "ACCEPT", "Safe setpoint inside arena envelope", (xw, yw, zw)
 
@@ -289,14 +289,15 @@ class FlightEnvelopeGuard:
                 PositionTarget.IGNORE_YAW_RATE
             )
             if self.current_pose is not None:
-                # Transform current camera-frame pose to world, clamp, transform back
-                pose_xc = self.current_pose.pose.position.x
-                pose_yc = self.current_pose.pose.position.y
+                # Convert MAVROS local_position/pose (ENU: x=East, y=North) to camera_init frame (xc=North, yc=West)
+                pose_xc = self.current_pose.pose.position.y
+                pose_yc = -self.current_pose.pose.position.x
                 pose_zc = self.current_pose.pose.position.z
                 pose_xw, pose_yw, pose_zw = self.camera_to_world(pose_xc, pose_yc, pose_zc)
                 xw_c = min(max(pose_xw, self.eff_xw_min), self.eff_xw_max)
                 yw_c = min(max(pose_yw, self.eff_yw_min), self.eff_yw_max)
-                zw_c = min(max(pose_zw, self.eff_zw_min), self.eff_zw_max)
+                target_zw = max(pose_zw, self.default_altitude)
+                zw_c = min(max(target_zw, self.eff_zw_min), self.eff_zw_max)
                 eff_x, eff_y, eff_z = self.world_to_camera(xw_c, yw_c, zw_c)
                 target.position.x = eff_x
                 target.position.y = eff_y
@@ -307,7 +308,7 @@ class FlightEnvelopeGuard:
             else:
                 target.position.x = 0.0
                 target.position.y = 0.0
-                target.position.z = min(max(self.default_altitude, self.eff_zw_min - 0.1), self.eff_zw_max - 0.1)
+                target.position.z = min(max(self.default_altitude, self.eff_zw_min), self.eff_zw_max)
                 target.yaw = 1.5708
 
             target.velocity.x = 0.0

@@ -29,7 +29,7 @@ class DummyGuard:
         self.world_y_max = 7.0
         self.world_z_min = 1.45
         self.world_z_max = 1.55
-        self.boundary_margin = 0.2
+        self.boundary_margin = 0.65
 
         self.eff_xw_min = self.world_x_min + self.boundary_margin
         self.eff_xw_max = self.world_x_max - self.boundary_margin
@@ -201,20 +201,20 @@ class TestFlightEnvelopeGuardProduction(unittest.TestCase):
     def test_clamp_at_world_boundary(self):
         """Points outside world boundaries should be clamped correctly."""
         print("\n--- Running Test 7: World Boundary Clamping ---")
-        # camera=(15, 0, 1.4) -> world=(0, 8.5, 1.5) — yw exceeds eff_yw_max (6.8)
-        # Clamped world = (0, 6.8, 1.5) -> camera = (6.8+6.5, 0, 1.4) = (13.3, 0, 1.4)
+        # camera=(15, 0, 1.4) -> world=(0, 8.5, 1.5) — yw exceeds eff_yw_max (6.35)
+        # Clamped world = (0, 6.35, 1.5) -> camera = (6.35+6.5, 0, 1.4) = (12.85, 0, 1.4)
         xc, yc, zc = 15.0, 0.0, 1.4
         px, py, pz = self.guard.clamp_and_transform(xc, yc, zc)
-        self.assertAlmostEqual(px, 13.3, places=2)
+        self.assertAlmostEqual(px, 12.85, places=2)
         self.assertAlmostEqual(py, 0.0, places=2)
         print(f"  Boundary ({xc},{yc},{zc}) -> clamped ({px:.2f},{py:.2f},{pz:.2f}) | PASS")
 
-        # camera=(6.5, -8, 1.4) -> world=(8, 0, 1.5) — xw exceeds eff_xw_max (6.8)
-        # Clamped world = (6.8, 0, 1.5) -> camera = (0+6.5, -6.8, 1.4) = (6.5, -6.8, 1.4)
+        # camera=(6.5, -8, 1.4) -> world=(8, 0, 1.5) — xw exceeds eff_xw_max (6.35)
+        # Clamped world = (6.35, 0, 1.5) -> camera = (0+6.5, -6.35, 1.4) = (6.5, -6.35, 1.4)
         xc, yc, zc = 6.5, -8.0, 1.4
         px, py, pz = self.guard.clamp_and_transform(xc, yc, zc)
         self.assertAlmostEqual(px, 6.5, places=2)
-        self.assertAlmostEqual(py, -6.8, places=2)
+        self.assertAlmostEqual(py, -6.35, places=2)
         print(f"  Boundary ({xc},{yc},{zc}) -> clamped ({px:.2f},{py:.2f},{pz:.2f}) | PASS")
 
     def test_camera_axis_mapping(self):

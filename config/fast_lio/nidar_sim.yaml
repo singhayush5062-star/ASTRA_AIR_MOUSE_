@@ -19,7 +19,7 @@ mapping:
     fov_degree: 360
     det_range: 130.0
     extrinsic_est_en: false      # We know the exact physical distance
-    extrinsic_T: [0.0, 0.0, 0.08]
+    extrinsic_T: [0.0, 0.0, 0.12]
     extrinsic_R: [1, 0, 0,
                   0, 1, 0,
                   0, 0, 1]

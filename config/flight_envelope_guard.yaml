@@ -9,8 +9,8 @@ flight_envelope_guard:
   world_x_max: 7.0
   world_y_min: -7.0
   world_y_max: 7.0
-  world_z_min: 1.45
-  world_z_max: 1.55
+  world_z_min: 0.3
+  world_z_max: 2.2
 
   # camera_init frame bounds are derived at runtime from world bounds
   # via world_to_camera() — no separate config needed

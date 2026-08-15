@@ -43,11 +43,11 @@
   <!-- Synchronize FIESTA map TF frame with FAST-LIO2 world frame -->
   <param name="exploration_node/map_ros/frame_id" value="camera_init"/>
 
-  <!-- Static transform publishers: map -> camera_init and world -> camera_init -->
+  <!-- Static transform publishers: world -> map and map -> camera_init -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="world_to_map_tf"
+    args="0.0 -6.5 0.1 1.5707963 0 0 world map"/>
   <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init_tf"
     args="0 0 0 0 0 0 map camera_init"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="world_to_camera_init_tf"
-    args="0.0 -6.5 0.1 1.5707963 0 0 world camera_init"/>
 
   <!-- Upstream FUEL Trajectory Server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen">
