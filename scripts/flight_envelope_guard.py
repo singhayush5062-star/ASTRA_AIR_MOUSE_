@@ -83,11 +83,8 @@ class FlightEnvelopeGuard:
         self.eff_zw_min = self.world_z_min
         self.eff_zw_max = self.world_z_max
 
-        # Also maintain camera_init bounds for legacy compatibility check
-        self.eff_x_min = rospy.get_param(param_ns + 'x_min', -6.0) + self.boundary_margin
-        self.eff_x_max = rospy.get_param(param_ns + 'x_max', 6.0) - self.boundary_margin
-        self.eff_y_min = rospy.get_param(param_ns + 'y_min', -0.5) + self.boundary_margin
-        self.eff_y_max = rospy.get_param(param_ns + 'y_max', 13.5) - self.boundary_margin
+        # Camera-frame bounds are derived at runtime via world_to_camera()
+        # No separate camera-frame config needed — world bounds are the single source of truth
 
         rospy.loginfo(
             f"[FlightEnvelopeGuard] Production Envelope Initialized (World Frame Authoritative):\n"
@@ -128,6 +125,13 @@ class FlightEnvelopeGuard:
         yw = xc - 6.5
         zw = zc + 0.1
         return xw, yw, zw
+
+    def world_to_camera(self, xw, yw, zw):
+        """Inverse rigid transformation from Gazebo world to camera_init frame."""
+        xc = yw + 6.5
+        yc = -xw
+        zc = zw - 0.1
+        return xc, yc, zc
 
     def state_cb(self, msg):
         self.current_state = msg
@@ -192,46 +196,51 @@ class FlightEnvelopeGuard:
                 PositionTarget.IGNORE_YAW_RATE
             )
 
-            # Clamp position setpoint to effective boundaries
-            px_c = min(max(xc, self.eff_x_min), self.eff_x_max)
-            py_c = min(max(yc, self.eff_y_min), self.eff_y_max)
-            pz_c = min(max(zc, self.eff_zw_min - 0.1), self.eff_zw_max - 0.1)
+            # Clamp position in world frame (single source of truth)
+            xw_clamped = min(max(xw, self.eff_xw_min), self.eff_xw_max)
+            yw_clamped = min(max(yw, self.eff_yw_min), self.eff_yw_max)
+            zw_clamped = min(max(zw, self.eff_zw_min), self.eff_zw_max)
+
+            # Inverse-transform clamped world position back to camera_init frame
+            px_c, py_c, pz_c = self.world_to_camera(xw_clamped, yw_clamped, zw_clamped)
 
             target.position.x = px_c
             target.position.y = py_c
             target.position.z = pz_c
 
-            # Directional velocity clamping near boundary margins to prevent outward momentum
-            vx = msg.velocity.x
-            vy = msg.velocity.y
+            # Directional velocity clamping near world-frame boundary margins
+            # Transform velocities to world frame (rotation only, no translation)
+            vx_w = -msg.velocity.y
+            vy_w = msg.velocity.x
             vz = msg.velocity.z
 
-            if px_c <= self.eff_x_min + 0.3:
-                vx = max(0.0, vx)
-            elif px_c >= self.eff_x_max - 0.3:
-                vx = min(0.0, vx)
+            if xw_clamped <= self.eff_xw_min + 0.3:
+                vx_w = max(0.0, vx_w)
+            elif xw_clamped >= self.eff_xw_max - 0.3:
+                vx_w = min(0.0, vx_w)
 
-            if py_c <= self.eff_y_min + 0.3:
-                vy = max(0.0, vy)
-            elif py_c >= self.eff_y_max - 0.3:
-                vy = min(0.0, vy)
+            if yw_clamped <= self.eff_yw_min + 0.3:
+                vy_w = max(0.0, vy_w)
+            elif yw_clamped >= self.eff_yw_max - 0.3:
+                vy_w = min(0.0, vy_w)
 
-            target.velocity.x = vx
-            target.velocity.y = vy
+            # Transform velocities back to camera_init frame
+            target.velocity.x = vy_w
+            target.velocity.y = -vx_w
             target.velocity.z = vz
 
             target.yaw = msg.yaw
 
             self.last_valid_command = target
             self.last_valid_pos_camera = (px_c, py_c, pz_c)
-            self.last_valid_pos_world = (xw, yw, zw)
+            self.last_valid_pos_world = (xw_clamped, yw_clamped, zw_clamped)
             self.last_valid_time = rospy.Time.now()
 
             rospy.loginfo_throttle(
                 5.0,
-                f"[FlightEnvelopeGuard] ACCEPT camera_init=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) -> world=({xw:.2f},{yw:.2f},{zw:.2f})"
+                f"[FlightEnvelopeGuard] ACCEPT camera_init=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) -> world=({xw_clamped:.2f},{yw_clamped:.2f},{zw_clamped:.2f})"
             )
-            self.pub_status.publish(f"ACCEPT: code={code} | camera=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) world=({xw:.2f},{yw:.2f},{zw:.2f})")
+            self.pub_status.publish(f"ACCEPT: code={code} | camera=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) world=({xw_clamped:.2f},{yw_clamped:.2f},{zw_clamped:.2f})")
         else:
             self.rejected_count += 1
             rospy.logwarn_throttle(
@@ -279,20 +288,26 @@ class FlightEnvelopeGuard:
                 PositionTarget.IGNORE_AFZ |
                 PositionTarget.IGNORE_YAW_RATE
             )
-            target_z = min(max(self.default_altitude, self.eff_zw_min - 0.1), self.eff_zw_max - 0.1)
             if self.current_pose is not None:
-                eff_x = min(max(self.current_pose.pose.position.x, self.eff_x_min), self.eff_x_max)
-                eff_y = min(max(self.current_pose.pose.position.y, self.eff_y_min), self.eff_y_max)
+                # Transform current camera-frame pose to world, clamp, transform back
+                pose_xc = self.current_pose.pose.position.x
+                pose_yc = self.current_pose.pose.position.y
+                pose_zc = self.current_pose.pose.position.z
+                pose_xw, pose_yw, pose_zw = self.camera_to_world(pose_xc, pose_yc, pose_zc)
+                xw_c = min(max(pose_xw, self.eff_xw_min), self.eff_xw_max)
+                yw_c = min(max(pose_yw, self.eff_yw_min), self.eff_yw_max)
+                zw_c = min(max(pose_zw, self.eff_zw_min), self.eff_zw_max)
+                eff_x, eff_y, eff_z = self.world_to_camera(xw_c, yw_c, zw_c)
                 target.position.x = eff_x
                 target.position.y = eff_y
-                target.position.z = target_z
+                target.position.z = eff_z
                 q = self.current_pose.pose.orientation
                 _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
                 target.yaw = yaw
             else:
                 target.position.x = 0.0
                 target.position.y = 0.0
-                target.position.z = target_z
+                target.position.z = min(max(self.default_altitude, self.eff_zw_min - 0.1), self.eff_zw_max - 0.1)
                 target.yaw = 1.5708
 
             target.velocity.x = 0.0

@@ -12,13 +12,8 @@ flight_envelope_guard:
   world_z_min: 1.45
   world_z_max: 1.55
 
-  # camera_init Frame Boundaries (FAST-LIO2 relative frame)
-  x_min: -6.0
-  x_max: 6.0
-  y_min: -0.5
-  y_max: 13.5
-  z_min: 1.45
-  z_max: 1.55
+  # camera_init frame bounds are derived at runtime from world bounds
+  # via world_to_camera() — no separate config needed
 
   # Safety Margin & Rate
   boundary_margin: 0.2

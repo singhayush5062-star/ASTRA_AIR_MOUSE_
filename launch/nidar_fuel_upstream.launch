@@ -19,11 +19,11 @@
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
 
-    <arg name="box_min_x" value="-6.0"/>
-    <arg name="box_min_y" value="-0.5"/>
+    <arg name="box_min_x" value="-0.5"/>
+    <arg name="box_min_y" value="-7.0"/>
     <arg name="box_min_z" value="0.2"/>
-    <arg name="box_max_x" value="6.0"/>
-    <arg name="box_max_y" value="13.5"/>
+    <arg name="box_max_x" value="13.5"/>
+    <arg name="box_max_y" value="7.0"/>
     <arg name="box_max_z" value="2.2"/>
 
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
