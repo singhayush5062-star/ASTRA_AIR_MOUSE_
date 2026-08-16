@@ -224,6 +224,12 @@ class FlightEnvelopeGuard:
             elif yw_clamped >= self.eff_yw_max - 0.3:
                 vy_w = min(0.0, vy_w)
 
+            # Z velocity clamping near boundaries (world frame Z = camera Z + 0.1, no rotation)
+            if zw_clamped <= self.eff_zw_min + 0.3:
+                vz = max(0.0, vz)   # Near floor: only allow upward velocity
+            elif zw_clamped >= self.eff_zw_max - 0.3:
+                vz = min(0.0, vz)   # Near ceiling: only allow downward velocity
+
             # Transform velocities back to camera_init frame
             target.velocity.x = vy_w
             target.velocity.y = -vx_w

@@ -6,7 +6,7 @@ void PolynomialTraj::waypointsTraj(const Eigen::MatrixXd& positions, const Eigen
                                    const Eigen::Vector3d& end_vel, const Eigen::Vector3d& start_acc,
                                    const Eigen::Vector3d& end_acc, const Eigen::VectorXd& times,
                                    PolynomialTraj& poly_traj) {
-  poly_traj.clear();
+  poly_traj.reset();
   if (positions.rows() < 2 || times.size() < 1) {
     return;
   }
@@ -44,7 +44,8 @@ void PolynomialTraj::waypointsTraj(const Eigen::MatrixXd& positions, const Eigen
     Eigen::VectorXd cy = Ab.colPivHouseholderQr().solve(by);
     Eigen::VectorXd cz = Ab.colPivHouseholderQr().solve(bz);
 
-    poly_traj.addSegment(cx, cy, cz, t);
+    Polynomial poly(cx, cy, cz, t);
+    poly_traj.addSegment(poly);
     return;
   }
 
