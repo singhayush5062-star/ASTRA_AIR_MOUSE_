@@ -17,5 +17,6 @@ flight_envelope_guard:
 
   # Safety Margin & Rate
   boundary_margin: 0.2
+  boundary_margin_z: 0.2
   publish_rate: 20.0
   default_altitude: 1.5

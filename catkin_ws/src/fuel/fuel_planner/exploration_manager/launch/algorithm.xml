@@ -48,7 +48,7 @@
     <param name="sdf_map/p_occ"  value="0.80"/>
     <param name="sdf_map/min_ray_length" value="0.5"/>
     <param name="sdf_map/max_ray_length" value="6.5"/>
-    <param name="sdf_map/virtual_ceil_height"   value="-10"/>
+    <param name="sdf_map/virtual_ceil_height"   value="1.9"/>
     <param name="sdf_map/optimistic" value="false" type="bool"/>
     <param name="sdf_map/signed_dist" value="false" type="bool"/>
     <param name="sdf_map/box_min_x" value="$(arg box_min_x)" type="double"/>

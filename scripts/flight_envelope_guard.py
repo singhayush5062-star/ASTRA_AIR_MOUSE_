@@ -28,7 +28,9 @@ catkin_py = '/home/developer/NIDAR/catkin_ws/devel/lib/python3/dist-packages'
 if os.path.exists(catkin_py) and catkin_py not in sys.path:
     sys.path.insert(0, catkin_py)
 
+import csv
 import math
+import time
 import rospy
 from quadrotor_msgs.msg import PositionCommand
 from mavros_msgs.msg import PositionTarget, State
@@ -72,6 +74,7 @@ class FlightEnvelopeGuard:
         self.world_z_max = rospy.get_param(param_ns + 'world_z_max', 1.55)
 
         self.boundary_margin = rospy.get_param(param_ns + 'boundary_margin', 0.2)
+        self.boundary_margin_z = rospy.get_param(param_ns + 'boundary_margin_z', 0.2)
         self.publish_rate = rospy.get_param(param_ns + 'publish_rate', 20.0)
         self.default_altitude = rospy.get_param(param_ns + 'default_altitude', 1.5)
 
@@ -80,8 +83,8 @@ class FlightEnvelopeGuard:
         self.eff_xw_max = self.world_x_max - self.boundary_margin
         self.eff_yw_min = self.world_y_min + self.boundary_margin
         self.eff_yw_max = self.world_y_max - self.boundary_margin
-        self.eff_zw_min = self.world_z_min
-        self.eff_zw_max = self.world_z_max
+        self.eff_zw_min = self.world_z_min + self.boundary_margin_z
+        self.eff_zw_max = self.world_z_max - self.boundary_margin_z
 
         # Camera-frame bounds are derived at runtime via world_to_camera()
         # No separate camera-frame config needed — world bounds are the single source of truth
@@ -91,7 +94,7 @@ class FlightEnvelopeGuard:
             f"  World X: [{self.eff_xw_min:.2f}, {self.eff_xw_max:.2f}] m\n"
             f"  World Y: [{self.eff_yw_min:.2f}, {self.eff_yw_max:.2f}] m\n"
             f"  World Z: [{self.eff_zw_min:.2f}, {self.eff_zw_max:.2f}] m\n"
-            f"  Margin: {self.boundary_margin:.2f} m | Rate: {self.publish_rate:.1f} Hz"
+            f"  Margin XY: {self.boundary_margin:.2f} m | Margin Z: {self.boundary_margin_z:.2f} m | Rate: {self.publish_rate:.1f} Hz"
         )
 
         # State tracking
@@ -106,6 +109,25 @@ class FlightEnvelopeGuard:
         self.accepted_count = 0
         self.rejected_count = 0
 
+        # Full-fidelity per-command diagnostic log (unthrottled, unlike the loginfo/logwarn
+        # above which drop most messages). This is what lets us reconstruct exactly which
+        # FUEL waypoint (raw camera_init position/velocity) triggered a given boundary event,
+        # instead of inferring it from throttled console output after the fact.
+        log_dir = os.path.expanduser(
+            rospy.get_param(param_ns + 'diag_log_dir', '/home/developer/NIDAR/logs'))
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, 'flight_envelope_guard_%d.csv' % int(time.time()))
+        self.diag_file = open(log_path, 'w', newline='')
+        self.diag_writer = csv.writer(self.diag_file)
+        self.diag_writer.writerow([
+            'ros_time', 'decision', 'code',
+            'fuel_xc', 'fuel_yc', 'fuel_zc', 'fuel_vxc', 'fuel_vyc', 'fuel_vzc',
+            'world_xw', 'world_yw', 'world_zw',
+            'sent_xc', 'sent_yc', 'sent_zc', 'sent_vxc', 'sent_vyc', 'sent_vzc',
+            'pose_world_xw', 'pose_world_yw', 'pose_world_zw',
+        ])
+        rospy.loginfo(f"[FlightEnvelopeGuard] Diagnostic log: {log_path}")
+
         # ROS Subscribers
         self.sub_state = rospy.Subscriber('/mavros/state', State, self.state_cb, queue_size=1)
         self.sub_pose = rospy.Subscriber('/mavros/local_position/pose', PoseStamped, self.pose_cb, queue_size=1)
@@ -118,6 +140,8 @@ class FlightEnvelopeGuard:
         # 20 Hz streaming timer for continuous PX4 OFFBOARD lock
         timer_period = 1.0 / self.publish_rate if self.publish_rate > 0 else 0.05
         self.timer = rospy.Timer(rospy.Duration(timer_period), self.timer_cb)
+
+        rospy.on_shutdown(self.diag_file.close)
 
     def camera_to_world(self, xc, yc, zc):
         """Rigid transformation from camera_init to Gazebo world frame."""
@@ -179,9 +203,19 @@ class FlightEnvelopeGuard:
 
         return True, "ACCEPT", "Safe setpoint inside arena envelope", (xw, yw, zw)
 
+    def _current_pose_world(self):
+        """Actual vehicle pose in world frame, for diagnostic correlation. None if no pose yet."""
+        if self.current_pose is None:
+            return None
+        pose_xc = self.current_pose.pose.position.y
+        pose_yc = -self.current_pose.pose.position.x
+        pose_zc = self.current_pose.pose.position.z
+        return self.camera_to_world(pose_xc, pose_yc, pose_zc)
+
     def fuel_cb(self, msg):
         is_valid, code, reason, (xw, yw, zw) = self.validate_command(msg)
         xc, yc, zc = msg.position.x, msg.position.y, msg.position.z
+        pose_w = self._current_pose_world()
 
         if is_valid:
             self.accepted_count += 1
@@ -247,6 +281,14 @@ class FlightEnvelopeGuard:
                 f"[FlightEnvelopeGuard] ACCEPT camera_init=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) -> world=({xw_clamped:.2f},{yw_clamped:.2f},{zw_clamped:.2f})"
             )
             self.pub_status.publish(f"ACCEPT: code={code} | camera=({px_c:.2f},{py_c:.2f},{pz_c:.2f}) world=({xw_clamped:.2f},{yw_clamped:.2f},{zw_clamped:.2f})")
+
+            self.diag_writer.writerow([
+                rospy.Time.now().to_sec(), 'ACCEPT', code,
+                xc, yc, zc, msg.velocity.x, msg.velocity.y, msg.velocity.z,
+                xw, yw, zw,
+                px_c, py_c, pz_c, target.velocity.x, target.velocity.y, target.velocity.z,
+                pose_w[0] if pose_w else '', pose_w[1] if pose_w else '', pose_w[2] if pose_w else '',
+            ])
         else:
             self.rejected_count += 1
             rospy.logwarn_throttle(
@@ -254,6 +296,15 @@ class FlightEnvelopeGuard:
                 f"[FlightEnvelopeGuard] REJECT [{code}]: {reason} | camera_init=({xc:.2f},{yc:.2f},{zc:.2f}) world=({xw:.2f},{yw:.2f},{zw:.2f}) | holding last safe position"
             )
             self.pub_status.publish(f"REJECT: code={code} | reason={reason}")
+
+            self.diag_writer.writerow([
+                rospy.Time.now().to_sec(), 'REJECT', code,
+                xc, yc, zc, msg.velocity.x, msg.velocity.y, msg.velocity.z,
+                xw, yw, zw,
+                '', '', '', '', '', '',
+                pose_w[0] if pose_w else '', pose_w[1] if pose_w else '', pose_w[2] if pose_w else '',
+            ])
+        self.diag_file.flush()
 
     def timer_cb(self, event):
         now = rospy.Time.now()

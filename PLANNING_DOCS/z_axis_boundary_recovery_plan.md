@@ -1,8 +1,15 @@
 # Implementation Plan — Z-Axis Boundary Crossing Causes Crash Instead of Soft Recovery
 
-Status: **plan only, no code changed**. Root causes below are traced directly against
+Status: **plan only, no code changed except this doc**. Root causes below are traced directly against
 `scripts/flight_envelope_guard.py`, `config/flight_envelope_guard.yaml`, the PX4 airframe file, and
 `catkin_ws/src/fuel/fuel_planner/exploration_manager/src/fast_exploration_fsm.cpp`.
+
+**Revision note (post-review):** the strategy below has been restructured around a source-level fix — constrain
+FUEL's own exploration map (`sdf_map/box_max_z`) so it structurally cannot generate a viewpoint above the ceiling,
+rather than relying on the downstream guard to reactively clamp/recover from a bad command after the fact. See
+§3, new **Phase 0**, which is now the primary fix. Phase 5 (verification) has been executed — see its section for
+results. Phases 3–4 (reactive clamp-and-resume, planner feedback loop) are downgraded to optional hardening,
+since Phase 0 eliminates the vast majority of the trigger conditions they were written to handle.
 
 ---
 
@@ -96,6 +103,72 @@ reject→resume transition. This is why the regression shipped unnoticed.
 
 ## 3. Proposed fix — phased
 
+### Phase 0 (PRIMARY FIX): Constrain FUEL's own exploration ceiling at the source
+
+**This is the fix that most directly matches the intended operational profile: hover at 1.5 m, allow up to 2.0 m
+world altitude for safety/mission headroom, and if FUEL's frontier search would otherwise propose a point above
+that, it should never be generated in the first place — the planner naturally moves on to the next feasible
+frontier instead.**
+
+Why this is better than reactively handling the crossing downstream (original Phases 1–4): those phases fight the
+problem *after* FUEL has already committed to an illegal point and the drone is already moving toward it — the
+best they can do is decelerate/clamp/recover more gracefully. Phase 0 removes the illegal point from FUEL's
+search space entirely. `FrontierFinder::expandFrontier()` and `FrontierFinder::sampleViewpoints()`
+(`active_perception/frontier_finder.cpp`) both bound-check every candidate against `sdf_map`'s box
+(`edt_env_->sdf_map_->isInBox(...)`), which is set directly from `sdf_map/box_min_z` / `sdf_map/box_max_z` in
+`algorithm.xml`. Tighten that box and FUEL structurally cannot propose, cluster, or score a frontier/viewpoint
+above the ceiling — "reject and move to a feasible point" happens for free, as the normal behavior of the
+existing TSP/frontier-selection logic, with no new reject/retry code needed.
+
+**Exact change (see §Phase 5 for the frame-math verification behind this number):**
+`sdf_map/box_max_z` in `catkin_ws/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml` should go from
+`2.2` → **`1.9`** (camera_init frame), which maps to exactly `2.0` in world frame — matching
+`config/flight_envelope_guard.yaml`'s `world_z_max`. `box_min_z = 0.2` is already correct (maps to world `0.3`,
+matching `world_z_min` exactly) and needs no change.
+
+The low-level guard (`flight_envelope_guard.py`) remains in place unchanged as a **last-resort backstop** for
+odometry drift, EKF noise, or transient state-estimation error — not as the primary mechanism for keeping the
+drone under the ceiling. Phases 1–2 below (margin + velocity damping) are still worth doing as defense-in-depth
+for that backstop role, but Phases 3–4 (reactive clamp-and-resume, planner feedback loop) are downgraded to
+optional hardening — see §4.
+
+**UPDATE — `box_max_z` alone was applied and tested; it did not stop the crash.** Root cause of that gap, found
+and fixed:
+
+`box_min_z`/`box_max_z` only constrain two things: `FrontierFinder`'s frontier/viewpoint search
+(`isInBox()` checks in `frontier_finder.cpp`) and the initial kinodynamic A* guide path
+(`isInBox()` in `kinodynamic_astar.cpp:134,173`). They are a **logical search-space bound**, not a physical
+obstacle. The actual flown trajectory comes from `BsplineOptimizer`, which smooths that initial guide path using
+cost terms (smoothness, distance-to-obstacle, feasibility, start/end, guide, waypoint, view, time —
+`bspline_optimizer.cpp`) — **none of which reference `box_min_z`/`box_max_z`**. The only thing that would stop the
+optimizer from placing control points above the box is `calcDistanceCost`, and that only reacts to cells the SDF
+map considers *occupied* — the ceiling isn't occupied, it's just outside a search-space rectangle nothing else
+respects.
+
+FUEL actually ships a mechanism for exactly this — a "virtual ceiling" that stamps a real occupied layer into the
+map at a chosen height so the EDT distance-cost term treats it like a wall:
+```cpp
+// plan_env/src/sdf_map.cpp
+if (mp_->virtual_ceil_height_ > -0.5) {
+  int ceil_id = floor((mp_->virtual_ceil_height_ - mp_->map_origin_(2)) * mp_->resolution_inv_);
+  ...
+  md_->occupancy_buffer_[toAddress(x, y, ceil_id)] = mp_->clamp_max_log_;
+}
+```
+It was disabled: `sdf_map/virtual_ceil_height` was `-10` in `algorithm.xml` (fails the `> -0.5` gate). **Fixed** —
+set to `1.9`, matching `box_max_z` exactly (same camera_init frame, no offset needed since both params are
+consumed directly by `sdf_map` in its native frame). This is now a *physical* obstacle the B-spline optimizer's
+distance cost will push away from, not just a logical search boundary.
+
+No equivalent "virtual floor" exists in `sdf_map.cpp` — only the ceiling case is implemented. This isn't a gap in
+practice: the real arena floor is physical, sensed geometry (LiDAR sees it), so it's already a genuine occupied
+obstacle in the SDF map and the optimizer already avoids it the normal way. Only the ceiling was virtual/logical
+and therefore invisible to the optimizer.
+
+**No rebuild required** — `algorithm.xml` and `nidar_fuel_upstream.launch` are pure roslaunch XML/params, read
+fresh at every `roslaunch`. Just restart the stack (`test_takeoff.sh` or equivalent) to pick up both the
+`box_max_z=1.9` and `virtual_ceil_height=1.9` changes together.
+
 ### Phase 1: Give Z the same predictive margin X/Y already has
 - Add a dedicated `boundary_margin_z` (don't reuse the X/Y `boundary_margin` directly — vertical stopping
   dynamics differ from horizontal: different max climb/descend rate, and the usable Z band is much shorter than
@@ -134,14 +207,42 @@ reject→resume transition. This is why the regression shipped unnoticed.
 - This phase is the one most likely to explain "tries to cross, gets fixed, but doesn't cleanly resume mapping"
   specifically, as opposed to the crash itself (which Phases 1–3 target).
 
-### Phase 5 (verification-only, no code): Confirm no physical ceiling/floor collision margin issue
-- Cross-check `world_z_max = 2.0` (guard) against the actual Gazebo arena mesh ceiling height
-  (`simulation/custom_models/nidar_arena/meshes/mapdraw.stl` / `nidar_world_arena.dae`) and the FUEL exploration
-  box (`sdf_map/box_max_z = 2.2` in `algorithm.xml`, in camera_init frame → world Z via `+0.1` offset ⇒ effective
-  world 2.3). There's already a ~0.3 m mismatch between the guard's `world_z_max=2.0` and the exploration map's
-  box in world frame (~2.3) worth resolving as part of this work, since FUEL may keep proposing viewpoints above
-  what the guard considers legal, generating a continuous stream of Z violations rather than an occasional edge
-  case.
+### Phase 5 (verification-only, no code) — **EXECUTED, mismatch confirmed**
+
+**Goal:** determine whether FUEL's exploration box and the guard's hard ceiling actually agree on where "the
+ceiling" is, before touching any code.
+
+**Method:** traced the coordinate frame FUEL's `sdf_map` actually operates in. `nidar_fuel_upstream.launch`
+wires `odometry_topic` = `/Fast_LIO/odometry` directly into `exploration_node`'s `/odom_world` — FUEL's internal
+state (including `sdf_map/box_min_z`/`box_max_z` bound checks) is therefore expressed in **camera_init frame**
+(FAST-LIO's native output frame), not world frame. This is the same frame `flight_envelope_guard.py`'s
+`camera_to_world()` converts *from* (`zw = zc + 0.1`).
+
+**Result:**
+
+| Quantity | Value | Frame | Equivalent world Z |
+|---|---|---|---|
+| `sdf_map/box_min_z` (algorithm.xml) | 0.2 | camera_init | **0.3** — matches `world_z_min` exactly ✅ |
+| `sdf_map/box_max_z` (algorithm.xml) | 2.2 | camera_init | **2.3** — guard's `world_z_max` is 2.0 ❌ |
+| `flight_envelope_guard.yaml: world_z_min` | 0.3 | world | — |
+| `flight_envelope_guard.yaml: world_z_max` | 2.0 | world | — |
+
+**Finding confirmed: there is a real, permanent 0.3 m gap.** The floor bound was already consistent
+(`box_min_z` happens to convert exactly to `world_z_min`). Only the ceiling was ever mismatched — FUEL's
+frontier/viewpoint search is structurally allowed to target up to 2.3 m world altitude, a full 0.3 m above the
+guard's hard 2.0 m ceiling. This is not an occasional edge case: any frontier whose best viewpoint naturally
+falls in that 0.3 m band will be generated, selected, and committed to by FUEL every time it's the best available
+option — then unconditionally rejected by the guard. This is very likely the dominant trigger for the reported
+crash pattern, independent of everything in §2.1–2.4.
+
+**Physical ceiling mesh check:** `simulation/custom_models/nidar_arena/meshes/mapdraw.stl` /
+`nidar_world_arena.dae` are binary/opaque mesh geometry — exact ceiling height couldn't be extracted via static
+analysis in this pass. Recommend confirming empirically (e.g. spawn the arena and check the collision height in
+Gazebo, or ask whoever authored the arena mesh) once Phase 0 is applied, to confirm 2.0 m world leaves adequate
+physical clearance under the real ceiling — this doc's fix corrects the FUEL/guard *config* mismatch, but doesn't
+independently verify the arena's physical ceiling height against either bound.
+
+**Conclusion: proceed with Phase 0** (`box_max_z: 2.2 → 1.9`) as the primary fix.
 
 ### Phase 6: Rebuild the test suite around this behavior
 - Update `scripts/test_flight_envelope_guard.py` to use the current production `world_z_min/max` (0.3/2.0) instead
@@ -151,27 +252,30 @@ reject→resume transition. This is why the regression shipped unnoticed.
 
 ---
 
-## 4. Suggested execution order
+## 4. Suggested execution order (revised)
 
-1. Phase 5 first (pure verification, no risk) — confirms whether the box-height mismatch is even a contributing
-   factor before touching guard logic.
-2. Phase 1 + 2 together (margin + velocity damping) — same shape as the X/Y fix already proven in production,
-   lowest-risk change, directly addresses "no early braking."
-3. Phase 6 partial — get the test file matching current config before further changes, so Phases 1–2 can be
-   verified against real assertions immediately.
-4. Phase 3 (clamp vs. reject redesign) — needs the design decision flagged above resolved first; this is the
-   piece most likely to eliminate the discontinuous "sudden fix" jump.
-5. Phase 4 (planner feedback) — largest scope, touches FSM C++ code and cross-language (Python guard ↔ C++ FUEL)
-   signaling; do last once 1–3 are validated to actually stop the crash, since it's solving the "doesn't resume
-   cleanly" complaint rather than the "crashes" complaint.
-6. Phase 6 remainder — finish test coverage once behavior is finalized.
+1. **Phase 5 — DONE.** Verified the box-height mismatch is real (0.3 m gap) and gave the exact corrective number.
+2. **Phase 0 — do next.** Single-line config change (`box_max_z: 2.2 → 1.9` in `algorithm.xml`), lowest possible
+   risk, directly implements the "hover 1.5 m / ceiling 2.0 m / reject-and-move-on" behavior you described as the
+   actual desired operational model. This alone is expected to eliminate most Z-boundary crash events, since it
+   stops FUEL from ever targeting the illegal band rather than trying to recover after the fact.
+3. Test Phase 0 (see §6 below) before deciding whether Phases 1–2 are still needed at all, or only as
+   belt-and-suspenders.
+4. Phase 1 + 2 (Z margin + velocity damping in the guard) — keep as defense-in-depth against odometry
+   drift/EKF noise even after Phase 0, but now optional-not-urgent rather than the primary fix.
+5. Phase 6 partial — fix the test file's stale `world_z_min/max` (1.45/1.55 → 0.3/2.0) regardless, since it's
+   wrong today independent of anything else in this plan.
+6. Phases 3 and 4 (reactive clamp-vs-reject redesign, planner feedback loop) — **downgraded to optional,
+   revisit only if Phase 0 + 1 + 2 still leave residual boundary incidents in testing.** Given Phase 0 removes
+   the dominant trigger, the added complexity of these two phases (new `validate_command` return contract,
+   cross-language FSM signaling) may not be justified at all.
 
 ## 5. Open decisions before implementation starts
 
-- Exact `boundary_margin_z` value — needs the vehicle's real max vertical velocity/accel (not yet confirmed from
-  PX4 `MPC_Z_VEL_MAX_UP`/`MPC_Z_VEL_MAX_DN`/`MPC_ACC_UP_MAX` params, which weren't checked in this pass).
-- Whether Phase 3's "clamp instead of reject" should be a permanent behavior change or gated by how close the
-  violation is (e.g., clamp for a small overshoot, still hard-reject for a large one).
-- Where the Phase 4 trigger should live — guard-side publish vs. FSM-side subscribe — and whether that coupling
-  is acceptable given the guard is meant to be a downstream safety net, not something the planner depends on
-  functionally.
+- **Phase 0:** does `box_max_z = 1.9` leave enough headroom above `box_min_z = 0.2` for FUEL to still find useful
+  frontiers/viewpoints in a 1.7 m-tall exploration volume? Should be fine (unchanged from today's usable band,
+  just the top edge moves down 0.3 m to close the gap) but worth a sanity check against `frontier/cluster_size_z
+  = 10.0` and viewpoint sampling behavior once tested.
+- Exact `boundary_margin_z` value for Phase 1 (if still pursued) — needs the vehicle's real max vertical
+  velocity/accel (PX4 `MPC_Z_VEL_MAX_UP`/`MPC_Z_VEL_MAX_DN`/`MPC_ACC_UP_MAX`, not yet checked).
+- Whether Phases 3–4 are worth doing at all post-Phase-0 — defer this decision until Phase 0 is tested.
