@@ -34,6 +34,7 @@ import time
 import rospy
 from quadrotor_msgs.msg import PositionCommand
 from mavros_msgs.msg import PositionTarget, State
+from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 
@@ -77,6 +78,27 @@ class FlightEnvelopeGuard:
         self.boundary_margin_z = rospy.get_param(param_ns + 'boundary_margin_z', 0.2)
         self.publish_rate = rospy.get_param(param_ns + 'publish_rate', 20.0)
         self.default_altitude = rospy.get_param(param_ns + 'default_altitude', 1.5)
+
+        # Max commanded yaw rate (rad/s). Generously above normal exploration turning
+        # (heading_planner/max_yaw_rate is ~0.175 rad/s) so legitimate maneuvers are never
+        # slowed down, but far below the ~20+ rad/s spikes FUEL's yaw-trajectory generator can
+        # produce when it hits its own known "Yaw change rapidly!" case (planner_manager.cpp) —
+        # that condition is currently only logged upstream, never clamped, so this is the last
+        # line of defense against an unflyable yaw command reaching PX4.
+        self.max_yaw_rate = rospy.get_param(param_ns + 'max_yaw_rate', 1.5)
+        self.commanded_yaw = None
+        self.commanded_yaw_time = rospy.Time(0)
+
+        # Vision (FAST-LIO) staleness watchdog. FAST-LIO/vision is PX4's *only* position-aiding
+        # source here (GPS and baro-position are both off) -- if it stops updating (LiDAR
+        # processing stall, CPU contention, scan degeneracy, anything), PX4's EKF free-integrates
+        # on IMU alone with nothing to correct it, and can silently run away while we keep
+        # forwarding "fresh" climb commands on top of an increasingly wrong internal state. This
+        # tracks the age of the raw /Fast_LIO/odometry feed directly (not the EKF-fused pose,
+        # which is exactly what can't be trusted once aiding is lost) and refuses to forward new
+        # commands once it's stale, falling back to the existing safe-hold path instead.
+        self.vision_timeout = rospy.get_param(param_ns + 'vision_timeout', 1.0)
+        self.last_vision_time = rospy.Time(0)
 
         # Effective World Boundaries incorporating safety margin
         self.eff_xw_min = self.world_x_min + self.boundary_margin
@@ -131,6 +153,7 @@ class FlightEnvelopeGuard:
         # ROS Subscribers
         self.sub_state = rospy.Subscriber('/mavros/state', State, self.state_cb, queue_size=1)
         self.sub_pose = rospy.Subscriber('/mavros/local_position/pose', PoseStamped, self.pose_cb, queue_size=1)
+        self.sub_vision = rospy.Subscriber('/Fast_LIO/odometry', Odometry, self.vision_cb, queue_size=1)
         self.sub_fuel = rospy.Subscriber('/planning/pos_cmd', PositionCommand, self.fuel_cb, queue_size=10)
 
         # ROS Publishers
@@ -157,11 +180,38 @@ class FlightEnvelopeGuard:
         zc = zw - 0.1
         return xc, yc, zc
 
+    def _slew_limit_yaw(self, raw_yaw):
+        """Rate-limit the commanded yaw so a single upstream command can never hand PX4 a
+        discontinuous jump. Steps toward raw_yaw by at most max_yaw_rate * dt per call, taking
+        the shorter angular direction. First call passes through unmodified (nothing to slew
+        from yet)."""
+        now = rospy.Time.now()
+        if self.commanded_yaw is None:
+            out_yaw = raw_yaw
+        else:
+            dt = max(1e-3, (now - self.commanded_yaw_time).to_sec())
+            delta = raw_yaw - self.commanded_yaw
+            while delta > math.pi:
+                delta -= 2 * math.pi
+            while delta < -math.pi:
+                delta += 2 * math.pi
+            max_step = self.max_yaw_rate * dt
+            if abs(delta) > max_step:
+                out_yaw = self.commanded_yaw + math.copysign(max_step, delta)
+            else:
+                out_yaw = raw_yaw
+        self.commanded_yaw = out_yaw
+        self.commanded_yaw_time = now
+        return out_yaw
+
     def state_cb(self, msg):
         self.current_state = msg
 
     def pose_cb(self, msg):
         self.current_pose = msg
+
+    def vision_cb(self, msg):
+        self.last_vision_time = rospy.Time.now()
 
     def validate_command(self, cmd):
         """
@@ -213,9 +263,32 @@ class FlightEnvelopeGuard:
         return self.camera_to_world(pose_xc, pose_yc, pose_zc)
 
     def fuel_cb(self, msg):
-        is_valid, code, reason, (xw, yw, zw) = self.validate_command(msg)
         xc, yc, zc = msg.position.x, msg.position.y, msg.position.z
         pose_w = self._current_pose_world()
+
+        vision_age = (rospy.Time.now() - self.last_vision_time).to_sec()
+        if self.last_vision_time.to_sec() == 0.0 or vision_age > self.vision_timeout:
+            # Vision (FAST-LIO) is stale or never seen -- PX4's EKF has no aiding source and may
+            # be free-integrating/diverging. Don't forward a "fresh" command built on that basis;
+            # fall back to the existing safe-hold path instead (see timer_cb) until vision resumes.
+            self.rejected_count += 1
+            rospy.logwarn_throttle(
+                1.0,
+                f"[FlightEnvelopeGuard] REJECT [VISION_STALE]: /Fast_LIO/odometry age={vision_age:.2f}s "
+                f"> {self.vision_timeout:.2f}s | holding last safe position"
+            )
+            self.pub_status.publish(f"REJECT: code=VISION_STALE | age={vision_age:.2f}s")
+            self.diag_writer.writerow([
+                rospy.Time.now().to_sec(), 'REJECT', 'VISION_STALE',
+                xc, yc, zc, msg.velocity.x, msg.velocity.y, msg.velocity.z,
+                '', '', '',
+                '', '', '', '', '', '',
+                pose_w[0] if pose_w else '', pose_w[1] if pose_w else '', pose_w[2] if pose_w else '',
+            ])
+            self.diag_file.flush()
+            return
+
+        is_valid, code, reason, (xw, yw, zw) = self.validate_command(msg)
 
         if is_valid:
             self.accepted_count += 1
@@ -269,7 +342,7 @@ class FlightEnvelopeGuard:
             target.velocity.y = -vx_w
             target.velocity.z = vz
 
-            target.yaw = msg.yaw
+            target.yaw = self._slew_limit_yaw(msg.yaw)
 
             self.last_valid_command = target
             self.last_valid_pos_camera = (px_c, py_c, pz_c)

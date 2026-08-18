@@ -47,7 +47,7 @@ param set-default EKF2_EV_DELAY 0
 param set-default EKF2_EV_CTRL 11
 param set-default EKF2_HGT_REF 3
 param set-default EKF2_GPS_CTRL 0
-param set-default EKF2_BARO_CTRL 0
+param set-default EKF2_BARO_CTRL 1
 param set-default EKF2_MAG_TYPE 5
 param set-default EKF2_EVP_NOISE 0.05
 param set-default EKF2_EVV_NOISE 0.05
@@ -59,6 +59,13 @@ param set-default ATT_EXT_HDG_M 1
 # Takeoff: Set default takeoff altitude to 1.5m and acceptance radius to 0.2m
 param set-default MIS_TAKEOFF_ALT 1.5
 param set-default NAV_MC_ALT_RAD 0.2
+
+# Failsafe: Enable flight termination (motor kill) when the FailureDetector logic trips
+# (FD_FAIL_P/FD_FAIL_R = 60deg tilt, FD_FAIL_P_TTRI/FD_FAIL_R_TTRI = 0.3s -- PX4 stock defaults).
+# CBRK_FLIGHTTERM defaults to 121212, which explicitly DISABLES flight termination even after a
+# detected attitude failure -- that's why a tipped-over vehicle stays armed with motors idling
+# instead of disarming. 0 = breaker not tripped, i.e. termination logic is actually active.
+param set-default CBRK_FLIGHTTERM 0
 
 # Failsafe: Disable low battery failsafe landing (Warning only) and battery drain
 param set COM_LOW_BAT_ACT 0

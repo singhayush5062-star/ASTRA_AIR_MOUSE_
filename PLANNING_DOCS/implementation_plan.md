@@ -93,17 +93,7 @@ graph TD
 - Run end-to-end mission loop: Launch in front of arena -> Explore maze -> Shortest path RTH -> Touchdown landing.
 - Document topic logs and telemetry timestamps.
 
----
 
-### Phase 5: Competition Enhancements & Perception Integration
-
-#### Proposed Changes:
-1. **[NEW] [map_2d_slicer_node.py](file:///home/ayush/Desktop/NIDAR/scripts/map_2d_slicer_node.py)**
-   - Slice point cloud between $Z = 0.3\text{m}$ and $Z = 1.8\text{m}$, publish 2D `OccupancyGrid` (`/map_2d`).
-2. **[NEW] [survivor_detector_node.py](file:///home/ayush/Desktop/NIDAR/scripts/survivor_detector_node.py)**
-   - Publish survivor 3D positions as `visualization_msgs/MarkerArray` on `/map_2d`.
-
----
 
 ## Verification Strategy
 

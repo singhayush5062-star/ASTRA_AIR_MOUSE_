@@ -50,6 +50,24 @@ def odometry_callback(msg):
     x = pose_msg.pose.position.x
     y = pose_msg.pose.position.y
 
+    # Absolute sanity envelope, checked against the RAW (pre relative-origin) FAST-LIO position
+    # since that's always in the fixed camera_init/arena frame regardless of use_relative_origin.
+    # Generous margin around the sdf_map box (box_min/max_x=[-0.5,13.5], y=[-7,7]). The jump/speed
+    # checks below only compare against the last PUBLISHED sample, so a slowly-runaway FAST-LIO
+    # estimate (e.g. after scan-matching degrades post-crash) can drift arbitrarily far from the
+    # real arena one small, individually plausible step at a time. Reject outright once the raw
+    # estimate leaves the arena's physical extent, rather than relaying a value PX4's EKF2 will
+    # free-integrate from.
+    raw_x = msg.pose.pose.position.x
+    raw_y = msg.pose.pose.position.y
+    if not (-3.5 <= raw_x <= 16.5 and -10.0 <= raw_y <= 10.0):
+        rospy.logwarn_throttle(1.0, "[relay_odometry] Rejecting vision sample: raw (%.1f, %.1f) outside arena sanity envelope", raw_x, raw_y)
+        rejected_count += 1
+        healthy_streak = 0
+        pub_rejected.publish(Int32(data=rejected_count))
+        pub_health.publish(Bool(data=(rejected_count < rejection_threshold)))
+        return
+
     # Clamp vision-z fed to EKF to prevent sudden estimator altitude jumps.
     z = pose_msg.pose.position.z
     if z < vision_z_min:

@@ -87,12 +87,35 @@ void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
         LocalTrajData* info = &planner_manager_->local_data_;
         double t_r = (ros::Time::now() - info->start_time_).toSec() + fp_->replan_time_;
 
-        fd_->start_pt_ = info->position_traj_.evaluateDeBoorT(t_r);
-        fd_->start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_r);
-        fd_->start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_r);
-        fd_->start_yaw_(0) = info->yaw_traj_.evaluateDeBoorT(t_r)[0];
-        fd_->start_yaw_(1) = info->yawdot_traj_.evaluateDeBoorT(t_r)[0];
-        fd_->start_yaw_(2) = info->yawdotdot_traj_.evaluateDeBoorT(t_r)[0];
+        Eigen::Vector3d predicted_pt = info->position_traj_.evaluateDeBoorT(t_r);
+
+        // Sanity-check the predicted start state against real odometry (fd_->odom_pos_ is kept
+        // up to date by odometryCallback regardless of static_state_). If the vehicle isn't
+        // actually tracking the planned trajectory -- stalled, physically obstructed, briefly
+        // lost aiding, anything -- replanning from the trajectory's own prediction compounds the
+        // divergence indefinitely, since it's never corrected against reality except on a full
+        // static-state reset (which only happens after NO_FRONTIER or a hard planning FAIL).
+        // Left unchecked, the planner can keep computing short, "almost there" trajectories
+        // relative to its own drifting internal belief while the real vehicle never moves.
+        const double kMaxTrackingError = 1.0;  // meters
+        if ((predicted_pt - fd_->odom_pos_).norm() > kMaxTrackingError) {
+          ROS_WARN(
+              "[FSM] Trajectory tracking diverged from real odometry by %.2fm -- replanning "
+              "from real odometry instead of predicted trajectory state",
+              (predicted_pt - fd_->odom_pos_).norm());
+          fd_->start_pt_ = fd_->odom_pos_;
+          fd_->start_vel_ = fd_->odom_vel_;
+          fd_->start_acc_.setZero();
+          fd_->start_yaw_(0) = fd_->odom_yaw_;
+          fd_->start_yaw_(1) = fd_->start_yaw_(2) = 0.0;
+        } else {
+          fd_->start_pt_ = predicted_pt;
+          fd_->start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_r);
+          fd_->start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_r);
+          fd_->start_yaw_(0) = info->yaw_traj_.evaluateDeBoorT(t_r)[0];
+          fd_->start_yaw_(1) = info->yawdot_traj_.evaluateDeBoorT(t_r)[0];
+          fd_->start_yaw_(2) = info->yawdotdot_traj_.evaluateDeBoorT(t_r)[0];
+        }
       }
 
       // Inform traj_server the replanning
@@ -345,9 +368,31 @@ void FastExplorationFSM::safetyCallback(const ros::TimerEvent& e) {
 }
 
 void FastExplorationFSM::odometryCallback(const nav_msgs::OdometryConstPtr& msg) {
-  fd_->odom_pos_(0) = msg->pose.pose.position.x;
-  fd_->odom_pos_(1) = msg->pose.pose.position.y;
-  fd_->odom_pos_(2) = msg->pose.pose.position.z;
+  Eigen::Vector3d new_pos(msg->pose.pose.position.x, msg->pose.pose.position.y,
+      msg->pose.pose.position.z);
+
+  // Sanity envelope in camera_init frame, generous margin around the sdf_map box
+  // (box_min/max_x=[-0.5,13.5], y=[-7,7], z=[0.2,1.9]). A corrupted FAST-LIO estimate
+  // (e.g. after a physical crash degrades LiDAR scan-matching) can drift far outside the
+  // arena one small step at a time -- each individual update looks plausible, so a
+  // frame-to-frame jump filter alone won't catch it, but the accumulated position will
+  // eventually leave this envelope. Reject those samples outright rather than feeding a
+  // runaway estimate into fd_->odom_pos_, which the PLAN_TRAJ replan-seed fallback (see
+  // FSMCallback) would otherwise trust unconditionally once it diverges from the predicted
+  // trajectory by more than kMaxTrackingError.
+  static const Eigen::Vector3d kOdomSanityMin(-3.5, -10.0, -1.0);
+  static const Eigen::Vector3d kOdomSanityMax(16.5, 10.0, 3.0);
+  if (fd_->have_odom_ &&
+      ((new_pos.array() < kOdomSanityMin.array()).any() ||
+          (new_pos.array() > kOdomSanityMax.array()).any())) {
+    ROS_ERROR_THROTTLE(1.0,
+        "[FSM] Rejecting implausible odometry (%.1f, %.1f, %.1f) -- outside arena sanity "
+        "envelope, likely a corrupted FAST-LIO estimate. Holding last known odometry.",
+        new_pos(0), new_pos(1), new_pos(2));
+    return;
+  }
+
+  fd_->odom_pos_ = new_pos;
 
   fd_->odom_vel_(0) = msg->twist.twist.linear.x;
   fd_->odom_vel_(1) = msg->twist.twist.linear.y;

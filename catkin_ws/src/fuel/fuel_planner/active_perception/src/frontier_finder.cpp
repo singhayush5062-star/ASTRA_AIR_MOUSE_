@@ -35,6 +35,8 @@ FrontierFinder::FrontierFinder(const EDTEnvironment::Ptr& edt, ros::NodeHandle& 
   nh.param("frontier/candidate_rmax", candidate_rmax_, -1.0);
   nh.param("frontier/candidate_rmin", candidate_rmin_, -1.0);
   nh.param("frontier/candidate_rnum", candidate_rnum_, -1);
+  nh.param("frontier/min_candidate_z", min_candidate_z_, -1e6);
+  nh.param("frontier/max_candidate_z", max_candidate_z_, 1e6);
   nh.param("frontier/down_sample", down_sample_, -1);
   nh.param("frontier/min_visib_num", min_visib_num_, -1);
   nh.param("frontier/min_view_finish_fraction", min_view_finish_fraction_, -1.0);
@@ -672,7 +674,16 @@ void FrontierFinder::sampleViewpoints(Frontier& frontier) {
        rc <= candidate_rmax_ + 1e-3; rc += dr)
     for (double phi = -M_PI; phi < M_PI; phi += candidate_dphi_) {
       n_total++;
-      const Vector3d sample_pos = frontier.average_ + rc * Vector3d(cos(phi), sin(phi), 0);
+      Vector3d sample_pos = frontier.average_ + rc * Vector3d(cos(phi), sin(phi), 0);
+      // Candidate altitude otherwise tracks the frontier cluster's own mean Z exactly (the
+      // above offset has zero Z component), which drags cruise altitude up/down to match
+      // wherever a frontier happens to be. Clamp to a cruise band; this only changes where the
+      // viewpoint stands, not which frontier cells it must see, so visibility coverage of
+      // out-of-band frontiers is reduced (viewed from the band edge) rather than lost outright.
+      if (sample_pos.z() < min_candidate_z_)
+        sample_pos.z() = min_candidate_z_;
+      else if (sample_pos.z() > max_candidate_z_)
+        sample_pos.z() = max_candidate_z_;
 
       // Qualified viewpoint is in bounding box and in safe region
       if (!edt_env_->sdf_map_->isInBox(sample_pos)) {

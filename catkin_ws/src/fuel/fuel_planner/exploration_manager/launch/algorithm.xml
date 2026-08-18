@@ -109,6 +109,15 @@
     <param name="frontier/candidate_rnum" value="5" type="int"/>
     <param name="frontier/candidate_rmin" value="0.4" type="double"/>
     <param name="frontier/candidate_rmax" value="2.6" type="double"/>
+    <!-- Viewpoint candidates otherwise inherit their frontier cluster's own mean Z exactly, which
+         drags cruise altitude up/down to match wherever a frontier happens to be, producing
+         constant oscillation instead of steady cruise flight. Clamp to a band around the 1.5m
+         takeoff altitude (camera_init frame; ~1.3-1.8m in world frame) so FUEL still explores in
+         3D but doesn't chase every frontier's exact height. -->
+    <!-- max kept at 1.6 (world ~1.7m), leaving 0.1m of margin below the guard's 1.8m effective
+         ceiling so trajectory overshoot around the clamped viewpoint doesn't trigger rejects. -->
+    <param name="frontier/min_candidate_z" value="1.2" type="double"/>
+    <param name="frontier/max_candidate_z" value="1.6" type="double"/>
     <param name="frontier/down_sample" value="3" type="int"/>;
     <param name="frontier/min_visib_num" value="10" type="int"/>;
     <param name="frontier/min_view_finish_fraction" value="0.6" type="double"/>;

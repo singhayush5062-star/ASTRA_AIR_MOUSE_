@@ -121,6 +121,7 @@ private:
   double cluster_size_xy_, cluster_size_z_;
   double candidate_rmax_, candidate_rmin_, candidate_dphi_, min_candidate_dist_,
       min_candidate_clearance_;
+  double min_candidate_z_, max_candidate_z_;
   int down_sample_;
   double min_view_finish_fraction_, resolution_;
   int min_visib_num_, candidate_rnum_;

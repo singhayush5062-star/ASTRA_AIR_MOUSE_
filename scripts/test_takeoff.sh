@@ -165,20 +165,6 @@ echo "Clean Upstream FUEL Autonomous Exploration Running!"
 echo "Architecture: FAST-LIO2 -> Upstream FUEL -> Flight Envelope Guard -> MAVROS -> PX4"
 echo "============================================================"
 
-for i in {1..300}; do
-    ARMED=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_arm', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.armed)" 2>/dev/null)
-    POS_X=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "x:" | awk '{print $2}')
-    POS_Y=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "y:" | awk '{print $2}')
-    POS_Z=$(rostopic echo /mavros/local_position/pose -n 1 2>/dev/null | grep -A 3 "position:" | grep "z:" | awk '{print $2}')
-    MODE=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_arm', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.mode)" 2>/dev/null)
-    
-    echo "[Telemetry t+$(($i*5))s] Pose: (${POS_X}, ${POS_Y}, ${POS_Z})m | Mode: ${MODE} | Armed: ${ARMED}"
-    
-    if [ "$ARMED" != "True" ] && [ $i -gt 4 ]; then
-        echo "Drone disarmed. Test complete."
-        break
-    fi
-    sim_sleep 5
-done
+/home/developer/NIDAR/scripts/mission_telemetry_logger.py
 
 echo "Simulation test execution complete."

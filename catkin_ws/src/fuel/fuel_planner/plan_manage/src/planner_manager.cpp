@@ -821,13 +821,21 @@ void FastPlannerManager::planYawExplore(const Eigen::Vector3d& start_yaw, const 
   // Final state
   Eigen::Vector3d end_yaw3d(end_yaw, 0, 0);
   calcNextYaw(last_yaw, end_yaw3d(0));
-  yaw.block<3, 1>(seg_num, 0) = states2pts * end_yaw3d;
 
-  // Debug rapid change of yaw
+  // Cap rapid yaw change: each individual calcNextYaw step above is bounded to <= PI, but the
+  // lookfwd waypoint-chaining loop reassigns last_yaw repeatedly, so a sequence of individually
+  // safe steps can accumulate into a much larger swing between the true start and this final
+  // boundary condition. Left unclamped, the optimizer below must bridge that swing within this
+  // segment's fixed duration, implying an unflyable yaw rate. Clamp to +/-PI from the true start
+  // yaw (preserving direction) instead of only logging it, bounding the worst case to
+  // PI / duration_ rather than leaving it unbounded.
   if (fabs(start_yaw3d[0] - end_yaw3d[0]) >= M_PI) {
-    ROS_ERROR("Yaw change rapidly!");
-    std::cout << "start yaw: " << start_yaw3d[0] << ", " << end_yaw3d[0] << std::endl;
+    ROS_WARN("Yaw change rapidly! start=%.3f end=%.3f (clamped to start +/- PI)", start_yaw3d[0],
+        end_yaw3d[0]);
+    end_yaw3d[0] = start_yaw3d[0] + ((end_yaw3d[0] > start_yaw3d[0]) ? M_PI : -M_PI);
   }
+
+  yaw.block<3, 1>(seg_num, 0) = states2pts * end_yaw3d;
 
   // // Interpolate start and end value for smoothness
   // for (int i = 1; i < seg_num; ++i)
