@@ -2,8 +2,18 @@
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source /opt/ros/noetic/setup.bash
+
 if [ -f "$ROOT_DIR/catkin_ws/devel/setup.bash" ]; then
     source "$ROOT_DIR/catkin_ws/devel/setup.bash"
+else
+    echo "Notice: $ROOT_DIR/catkin_ws/devel/setup.bash is missing. Running 'catkin build' to relink merged devel space and generate setup environment..."
+    (cd "$ROOT_DIR/catkin_ws" && catkin build)
+    if [ -f "$ROOT_DIR/catkin_ws/devel/setup.bash" ]; then
+        source "$ROOT_DIR/catkin_ws/devel/setup.bash"
+    else
+        echo "ERROR: Failed to generate $ROOT_DIR/catkin_ws/devel/setup.bash! Run 'catkin build' manually inside catkin_ws."
+        exit 1
+    fi
 fi
 
 export DISPLAY="${DISPLAY:-:1}"

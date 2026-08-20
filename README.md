@@ -102,3 +102,18 @@ NIDAR/
 ## Key Technical Profiles
 * **EKF External Vision Fusion:** PX4 ROMFS defaults are hard-coded (`EKF2_EV_CTRL = 15`) to enable robust GPS-denied state estimation driven by `/Fast_LIO/odometry`.
 * **Exploration Safety Bounds:** Maximum exploration velocity is capped at **$1.0\text{ m/s}$**, with safety clearances optimized for narrow indoor corridors and warehouse obstacles.
+
+---
+
+## Troubleshooting & Known Issues
+
+### `ERROR: cannot launch node of type [fast_lio/fastlio_mapping]: fast_lio`
+* **Cause:** `catkin_ws/devel/setup.bash` was deleted or unlinked by a partial package build, leaving ROS package environment variables (`ROS_PACKAGE_PATH`) unaware of `fast_lio` or other nodes.
+* **Fix:** Relink the merged devel space and regenerate setup files by running a full workspace build:
+  ```bash
+  cd catkin_ws && catkin build
+  source devel/setup.bash
+  cd ~/NIDAR
+  ```
+* **Auto-Healing:** `./scripts/setup_env.sh` automatically detects if `catkin_ws/devel/setup.bash` is missing and triggers `catkin build` to repair workspace linking.
+
