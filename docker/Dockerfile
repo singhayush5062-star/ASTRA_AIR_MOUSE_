@@ -137,8 +137,9 @@ RUN apt-get update && apt-get install -y \
 
 RUN git clone https://github.com/Livox-SDK/Livox-SDK.git /tmp/Livox-SDK && \
     cd /tmp/Livox-SDK && \
-    mkdir build && cd build && \
+    rm -rf build && mkdir -p build && cd build && \
     cmake .. && make -j$(nproc) && make install && \
+    ldconfig && \
     rm -rf /tmp/Livox-SDK
 
 ############################################################

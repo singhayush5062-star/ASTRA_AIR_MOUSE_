@@ -83,7 +83,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 ## make sure the livox_sdk_static library is installed
-find_library(LIVOX_SDK_LIBRARY liblivox_sdk_static.a /usr/local/lib)
+find_library(LIVOX_SDK_LIBRARY NAMES livox_sdk_static liblivox_sdk_static.a PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib64)
 
 if((NOT LIVOX_SDK_LIBRARY) OR (NOT EXISTS ${LIVOX_SDK_LIBRARY}))
 	# couldn't find the livox sdk library
