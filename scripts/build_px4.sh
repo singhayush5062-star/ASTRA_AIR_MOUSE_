@@ -32,6 +32,10 @@ ensure_git_bootstrap() {
 }
 ensure_git_bootstrap "$PX4_DIR" "v1.14.3"
 ensure_git_bootstrap "$PX4_DIR/src/modules/mavlink/mavlink" ""
+ensure_git_bootstrap "$PX4_DIR/src/drivers/gps/devices" ""
+ensure_git_bootstrap "$PX4_DIR/Tools/simulation/gazebo-classic/sitl_gazebo-classic" ""
+ensure_git_bootstrap "$PX4_DIR/src/modules/uxrce_dds_client/Micro-XRCE-DDS-Client" ""
+ensure_git_bootstrap "$PX4_DIR/src/lib/events/libevents" ""
 
 cd "$PX4_DIR"
 
