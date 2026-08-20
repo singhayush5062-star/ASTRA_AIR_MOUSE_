@@ -26,7 +26,7 @@ third-party SLAM package's internals, not a parameter you can flip on.
 
 ## Fact check: `EKF2_BARO_CTRL` already applied is on a completely different estimator, for a different purpose
 
-`EKF2_BARO_CTRL 1` (set earlier this session in the PX4 airframe config) controls **PX4's own onboard EKF2**,
+EKF2_BARO_CTRL 1 (set earlier this session in the PX4 airframe config) controls **PX4's own onboard EKF2**,
 which is a wholly separate estimator from FAST-LIO, running inside the flight controller. Its job is to fuse:
 - vision (relayed from FAST-LIO's odometry via `relay_odometry.py` → `/mavros/vision_pose/pose`)
 - IMU

@@ -174,3 +174,42 @@ it gets nudged into contact by residual velocity/wind-up, or (as seen here) simp
 - This spawn-adjacent corner should be treated as a known problem spot for this specific arena/spawn combination
   — worth deciding whether to spawn further from it, or fix the corner-approach behavior generally before further
   testing focuses elsewhere.
+
+## Verification run #5 (2026-08-18) — CPU pinning/Release build confirmed fixing root cause #2; root cause #5 now the dominant remaining failure
+
+After applying `cpu_bottleneck_implementation_plan_2026-08-17.md` (FAST-LIO Release build, topology-aware CPU
+pinning, periodic re-pin loop — GUI left on), a live trial ran to **320+ seconds** before landing, covering
+substantially more of the arena than any prior run (best previous was ~130s). Diagnosed live, mid-run, whether
+this landing was a recurrence of root cause #2 (FAST-LIO/CPU stall) or something else, using the checks below —
+worth keeping as the standard method for telling the two apart in future runs:
+
+| Check | FAST-LIO/CPU freeze signature | Genuine collision signature |
+|---|---|---|
+| `rostopic hz /Fast_LIO/odometry` | drops to ~0 / stalls | stays steady |
+| `rostopic echo` on that topic | frozen/repeating value or blown-up covariance | plausible values, tight covariance |
+| `mission_telemetry` CSV `ekf_fastlio_divergence_m` | grows over time | stays small |
+| `fuel.log` around the failure | goes silent | keeps logging (replan attempts, collision messages) |
+| Gazebo `get_model_state` | confirms touchdown, but preceded by a fast_lio.log gap | confirms touchdown, but fuel.log stayed active throughout |
+
+Applied to this run: `rostopic hz /Fast_LIO/odometry` showed a steady ~10Hz (std dev 0.016s); `rostopic echo`
+showed plausible position/tight covariance; no odometry-sanity rejections fired anywhere in the logs (the fixes
+from the previous root-cause pass would have logged those if FAST-LIO's output had gone bad); `mission_telemetry`
+showed `ekf_fastlio_divergence_m` in the 0.004-0.017m range throughout. **Conclusion: not a freeze.**
+
+Instead, `fuel.log` showed FUEL's own collision checker (`safetyCallback`/`checkTrajCollision`) firing
+repeatedly and continuously: `collision at: 11.2-11.5, 1.9, 1.6` / `Replan: collision detected`, over **15+
+seconds straight** (sim t=306.8s → 321.2s+), always at essentially the same camera_init coordinates. Gazebo
+ground truth confirmed the vehicle came to rest at that same location (world ≈ -1.46, 5.97, z=0.055m). This is
+root cause #5 from the previous section, recurring at a different location than the original spawn-corner
+case — confirming it's a general "no retreat behavior after a collision/blocked-replan loop" issue, not
+specific to that one corner. **This is now the dominant, last-remaining known cause of incomplete coverage** —
+both CPU-related causes (root cause #2's stall, and the theoretical "contention even with pinning" question)
+are ruled out for this run by the evidence above.
+
+One CPU-pinning caveat worth noting for future load investigations: `taskset` *restricts* where a pinned process
+can run, it does not *reserve* those cores exclusively for it — unpinned work (this session's own concurrent
+Bash/analysis commands, the IDE, GUI compositor, etc.) can still be scheduled onto FAST-LIO's cores too. System-
+wide `uptime` load average during this run was still high (12.24, 15.02, 12.12 on a 12-thread machine), so the
+pinning is necessary-but-not-sufficient for true isolation — true exclusivity would need cgroup cpuset (checked:
+`/sys/fs/cgroup` is read-only in this environment, so unavailable) or `isolcpus` at boot. Despite that caveat,
+FAST-LIO stayed healthy throughout this run, so it wasn't the deciding factor here.

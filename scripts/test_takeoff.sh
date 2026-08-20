@@ -16,11 +16,41 @@ pkill -f traj_server 2>/dev/null || true
 pkill -f waypoint_generator 2>/dev/null || true
 pkill -f fast_lio 2>/dev/null || true
 pkill -f FAST_LIO 2>/dev/null || true
+pkill -f cpu_repin_loop.sh 2>/dev/null || true
 rm -rf /home/developer/.ros/dataman /home/developer/.ros/eeprom /home/developer/.ros/parameters.bson /home/developer/.ros/parameters_backup.bson
 
 sim_sleep() {
     local duration=$1
     python3 -c "import rospy; rospy.init_node('sim_sleep_node', anonymous=True); rospy.sleep($duration)" 2>/dev/null || sleep $duration
+}
+
+# CPU pinning (6 physical cores / 12 threads on this machine -- lscpu -p pairs: 0,1 / 2,3 / 4,5 / 6,7 / 8,9 / 10,11
+# are hyperthread siblings of the same physical core, so pinning must stay aligned to those pairs to actually
+# separate load across physical cores instead of just across threads of the same one).
+# core0 (0,1): FAST-LIO -- most latency-critical, gets a dedicated core.
+# core1 (2,3): gzserver -- physics + sensor sim.
+# core2 (4,5): px4 SITL -- real-time flight control loop, needs low jitter.
+# core3 (6,7): MAVROS + flight_envelope_guard.py + relay_odometry.py -- safety-critical bridge chain.
+# core4-5 (8-11): left unpinned -- FUEL/exploration_manager, rosout, GUI rendering, logging, OS overhead.
+pin_process() {
+    # Pins every matching PID, not just the first -- some targets (e.g. gzserver, which roslaunch
+    # starts via a /bin/sh wrapper that then forks the real binary as a separate child PID) run as a
+    # wrapper+child pair, and affinity set on a parent after its child has already forked does not
+    # retroactively apply to that child.
+    #
+    # For each matched PID, also pins every existing thread individually (/proc/<pid>/task/*), not just
+    # the main thread: `taskset -pc <cores> <pid>` only sets affinity for that one thread's LWP: a
+    # multithreaded process like gzserver (~15+ threads for physics/rendering/ROS) otherwise keeps
+    # running its other threads unrestricted across all cores, silently defeating the pin.
+    local pattern="$1" cores="$2" pid tid
+    for pid in $(pgrep -f "$pattern"); do
+        local pinned_any=0
+        for tid in /proc/"$pid"/task/*; do
+            [ -d "$tid" ] || continue
+            taskset -pc "$cores" "$(basename "$tid")" >/dev/null 2>&1 && pinned_any=1
+        done
+        [ "$pinned_any" = "1" ] && echo "Pinned $pattern (pid $pid, all threads) -> cores $cores"
+    done
 }
 
 source /home/developer/NIDAR/scripts/setup_env.sh
@@ -44,13 +74,20 @@ if [ "$STATUS" != "True" ]; then
     exit 1
 fi
 
+echo "Pinning simulation/flight-control processes to dedicated physical cores..."
+pin_process "gzserver" "2,3"
+pin_process "bin/px4" "4,5"
+pin_process "mavros_node" "6,7"
+
 echo "Launching FAST-LIO2 Mapping & RViz..."
 roslaunch /home/developer/NIDAR/launch/fast_lio/nidar_mapping.launch rviz:=$GUI_ARG > /tmp/fast_lio.log 2>&1 &
 sim_sleep 2
+pin_process "fastlio_mapping" "0,1"
 
 echo "Starting Odometry Relay (FAST-LIO -> PX4 EKF2)..."
 /home/developer/NIDAR/scripts/relay_odometry.py > /tmp/relay.log 2>&1 &
 sim_sleep 2
+pin_process "relay_odometry.py" "6,7"
 
 verify_topic() {
     local topic=$1
@@ -87,6 +124,10 @@ rosparam load /home/developer/NIDAR/config/flight_envelope_guard.yaml /
 echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
 /home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
 sim_sleep 1
+pin_process "flight_envelope_guard.py" "6,7"
+
+echo "Starting CPU-core re-pin loop (catches worker threads gzserver/px4 spawn after the initial pin)..."
+/home/developer/NIDAR/scripts/cpu_repin_loop.sh > /tmp/cpu_repin.log 2>&1 &
 
 echo "Setting PX4 Takeoff Altitude parameter to 1.5m..."
 rosrun mavros mavparam set MIS_TAKEOFF_ALT 1.5 >/dev/null 2>&1 || true
