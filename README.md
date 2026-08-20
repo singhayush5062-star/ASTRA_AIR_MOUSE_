@@ -89,7 +89,7 @@ NIDAR/
 │   └── nidar_lidar.rviz
 ├── scripts/                       # Autonomous mission managers and utility scripts
 │   ├── docker_dev_start.sh        # Team onboarding container launcher
-│   ├── fuel_to_mavros_bridge.py   # Trajectory-to-MAVROS offboard command bridge (v_max = 1.0 m/s)
+│   ├── flight_envelope_guard.py   # Trajectory-to-MAVROS offboard command bridge & safety envelope (v_max = 0.6 m/s)
 │   ├── relay_odometry.py          # Relays SLAM estimates to PX4 vision pose fusion
 │   └── test_takeoff.sh            # End-to-end automated mission execution script
 └── simulation/                    # Simulation models & PX4 Autopilot environment
@@ -100,8 +100,8 @@ NIDAR/
 ---
 
 ## Key Technical Profiles
-* **EKF External Vision Fusion:** PX4 ROMFS defaults are hard-coded (`EKF2_EV_CTRL = 15`) to enable robust GPS-denied state estimation driven by `/Fast_LIO/odometry`.
-* **Exploration Safety Bounds:** Maximum exploration velocity is capped at **$1.0\text{ m/s}$**, with safety clearances optimized for narrow indoor corridors and warehouse obstacles.
+* **EKF External Vision Fusion:** PX4 ROMFS defaults are hard-coded (`EKF2_EV_CTRL = 11`) to enable robust GPS-denied state estimation driven by `/Fast_LIO/odometry`, with `EKF2_BARO_CTRL = 1` fusing barometric height as a cross-check.
+* **Exploration Safety Bounds:** Maximum exploration velocity is capped at **$0.6\text{ m/s}$** (`max_vel` in `launch/nidar_fuel_upstream.launch`), with safety clearances optimized for narrow indoor corridors and warehouse obstacles.
 
 ---
 
@@ -116,4 +116,13 @@ NIDAR/
   cd ~/NIDAR
   ```
 * **Auto-Healing:** `./scripts/setup_env.sh` automatically detects if `catkin_ws/devel/setup.bash` is missing and triggers `catkin build` to repair workspace linking.
+
+### `Makefile:39: *** YOU HAVE TO USE GIT TO DOWNLOAD THIS REPOSITORY. ABORTING.` (during `./scripts/build_px4.sh`)
+* **Cause:** `simulation/PX4-Autopilot-v1.14.3` is vendored into this repository as plain files rather than
+  a git submodule, so a fresh clone has no `.git` there — but PX4's own build system requires one (both at
+  its root, and inside a couple of nested paths its version-header generator checks, e.g.
+  `src/modules/mavlink/mavlink`).
+* **Auto-Healing:** `./scripts/build_px4.sh` automatically detects and bootstraps a minimal, self-contained
+  local git repo in each place PX4's build tooling needs one — no action required, this runs automatically
+  on every invocation and is a no-op once already bootstrapped.
 
