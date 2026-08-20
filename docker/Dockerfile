@@ -132,6 +132,51 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ############################################################
+# Livox-SDK System Installation
+############################################################
+
+RUN git clone https://github.com/Livox-SDK/Livox-SDK.git /tmp/Livox-SDK && \
+    cd /tmp/Livox-SDK && \
+    mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install && \
+    rm -rf /tmp/Livox-SDK
+
+############################################################
+# PX4 Autopilot & ROS Python Dependencies
+############################################################
+
+RUN pip3 install --no-cache-dir \
+    "empy==3.3.4" \
+    argcomplete \
+    argparse \
+    cerberus \
+    coverage \
+    future \
+    jinja2 \
+    jsonschema \
+    kconfiglib \
+    lxml \
+    matplotlib \
+    numpy \
+    nunavut \
+    packaging \
+    pandas \
+    pkgconfig \
+    psutil \
+    pygments \
+    pymavlink \
+    pyros-genmsg \
+    pyserial \
+    pyulog \
+    pyyaml \
+    requests \
+    six \
+    toml \
+    sympy \
+    rospkg \
+    catkin_pkg
+
+############################################################
 # Create Developer User
 ############################################################
 

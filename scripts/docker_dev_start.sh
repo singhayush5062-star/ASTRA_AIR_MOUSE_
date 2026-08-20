@@ -4,7 +4,7 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE_NAME="ros-noetic-workspace"
-CONTAINER_NAME="nidar_dev_container"
+CONTAINER_NAME="ros_workspace"
 
 echo "============================================================"
 echo "[1/3] Configuring host X11 display authorization..."
@@ -26,24 +26,30 @@ else
 fi
 
 echo "============================================================"
-echo "[3/3] Launching interactive NIDAR development container..."
+echo "[3/3] Managing persistent NIDAR development container ($CONTAINER_NAME)..."
 echo "============================================================"
-# Remove existing container if running/stopped with the same name
 if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-    echo "Cleaning up previous stopped container titled $CONTAINER_NAME..."
-    docker rm -f "$CONTAINER_NAME" || true
+    IS_RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null || echo "false")
+    if [ "$IS_RUNNING" = "true" ]; then
+        echo "Container '$CONTAINER_NAME' is already running. Attaching interactive shell..."
+        docker exec -it "$CONTAINER_NAME" /bin/bash
+    else
+        echo "Starting existing stopped container '$CONTAINER_NAME'..."
+        docker start "$CONTAINER_NAME"
+        docker exec -it "$CONTAINER_NAME" /bin/bash
+    fi
+else
+    echo "Creating new persistent container '$CONTAINER_NAME'..."
+    docker run -it \
+        --net=host \
+        --name "$CONTAINER_NAME" \
+        --ipc=host \
+        --privileged \
+        -e DISPLAY="${DISPLAY:-:0}" \
+        -e LIBGL_ALWAYS_SOFTWARE=0 \
+        -e QT_X11_NO_MITSHM=1 \
+        -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+        -v "$REPO_ROOT:/home/developer/NIDAR" \
+        -w /home/developer/NIDAR \
+        "$IMAGE_NAME" /bin/bash
 fi
-
-# Execute container with host networking, GUI X11 forwarding, and workspace volume binding
-docker run -it --rm \
-    --net=host \
-    --name "$CONTAINER_NAME" \
-    --ipc=host \
-    --privileged \
-    -e DISPLAY="${DISPLAY:-:0}" \
-    -e LIBGL_ALWAYS_SOFTWARE=0 \
-    -e QT_X11_NO_MITSHM=1 \
-    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    -v "$REPO_ROOT:/home/developer/NIDAR" \
-    -w /home/developer/NIDAR \
-    "$IMAGE_NAME" /bin/bash
