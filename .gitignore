@@ -31,4 +31,8 @@ host_test.txt
 # Root-level redundant FAST_LIO folder (active code is in catkin_ws/src/FAST_LIO)
 /FAST_LIO/
 
+# Local backup/export archives - never committed (repo is already large; these are per-machine)
+/nidar_airmouse.tar.gz
+/ros_workspace.tar.gz
+
 

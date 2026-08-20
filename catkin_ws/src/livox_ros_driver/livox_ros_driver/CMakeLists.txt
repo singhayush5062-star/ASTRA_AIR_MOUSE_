@@ -83,7 +83,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 ## make sure the livox_sdk_static library is installed
-find_library(LIVOX_SDK_LIBRARY NAMES livox_sdk_static liblivox_sdk_static.a PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib64)
+find_library(LIVOX_SDK_LIBRARY NAMES livox_sdk_static liblivox_sdk_static.a
+	PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/local/lib64)
 
 if((NOT LIVOX_SDK_LIBRARY) OR (NOT EXISTS ${LIVOX_SDK_LIBRARY}))
 	# couldn't find the livox sdk library
@@ -101,20 +102,36 @@ if((NOT LIVOX_SDK_LIBRARY) OR (NOT EXISTS ${LIVOX_SDK_LIBRARY}))
 		MESSAGE(${res})
 	ENDFOREACH()
 
-	execute_process(COMMAND git clone https://github.com/Livox-SDK/Livox-SDK.git ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK OUTPUT_VARIABLE cmd_res)
+	execute_process(COMMAND git clone https://github.com/Livox-SDK/Livox-SDK.git ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK
+		RESULT_VARIABLE clone_result OUTPUT_VARIABLE cmd_res)
 	FOREACH(res ${cmd_res})
 		MESSAGE(${res})
 	ENDFOREACH()
+	if(NOT clone_result EQUAL 0)
+		message(FATAL_ERROR "Failed to git clone Livox-SDK from GitHub (no network access?) and no "
+			"system-installed livox_sdk_static library was found either. Install Livox-SDK system-wide "
+			"(see docker/Dockerfile) or ensure network access to github.com, then re-run catkin build.")
+	endif()
 
-	execute_process(COMMAND cmake .. WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK/build OUTPUT_VARIABLE cmd_res)
-	FOREACH(res ${cmd_res})
-		MESSAGE(${res})
-	ENDFOREACH()
+	execute_process(COMMAND mkdir -p ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK/build)
 
-	execute_process(COMMAND make WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK/build OUTPUT_VARIABLE cmd_res)
+	execute_process(COMMAND cmake .. WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK/build
+		RESULT_VARIABLE cmake_result OUTPUT_VARIABLE cmd_res)
 	FOREACH(res ${cmd_res})
 		MESSAGE(${res})
 	ENDFOREACH()
+	if(NOT cmake_result EQUAL 0)
+		message(FATAL_ERROR "Failed to configure the locally-cloned Livox-SDK build.")
+	endif()
+
+	execute_process(COMMAND make WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Livox-SDK/build
+		RESULT_VARIABLE make_result OUTPUT_VARIABLE cmd_res)
+	FOREACH(res ${cmd_res})
+		MESSAGE(${res})
+	ENDFOREACH()
+	if(NOT make_result EQUAL 0)
+		message(FATAL_ERROR "Failed to build the locally-cloned Livox-SDK.")
+	endif()
 
 	include_directories(
 		./
