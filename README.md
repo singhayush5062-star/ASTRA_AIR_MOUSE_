@@ -4,23 +4,57 @@ This repository contains the complete autonomous exploration, volumetric mapping
 
 ---
 
+## System Prerequisites & Requirements
+
+Before setting up the environment, ensure your host system meets the following software and hardware requirements:
+
+### 1. Host Operating System
+* **Recommended:** Ubuntu 20.04 LTS or Ubuntu 22.04 LTS (or any Linux distribution running an X11 display server).
+
+### 2. Docker Engine & User Permissions
+* **Docker Engine Version:** Docker Engine `v20.10.0` or higher (`v24.0+` recommended).
+* **Non-Root Docker Privileges:** Ensure your user account is added to the `docker` group so container management scripts execute without requiring `sudo`:
+  ```bash
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
+
+### 3. Display Authorization & Graphical Forwarding (X11)
+* **X11 Utilities:** Install `xhost` on the host to allow the Docker container to render Gazebo and RViz GUIs on your host display:
+  ```bash
+  sudo apt-get update && sudo apt-get install -y x11-xserver-utils
+  ```
+* **Graphics Drivers:** OpenGL 3.3+ hardware acceleration (NVIDIA proprietary drivers or Intel/AMD Mesa drivers).
+
+### 4. Recommended Hardware Specifications
+* **CPU:** Quad-core 2.5GHz+ processor (8+ threads recommended for concurrent SITL, SLAM, and FUEL planning loops).
+* **RAM:** Minimum **8 GB** (16 GB recommended for parallel `catkin build` compilation).
+* **Disk Storage:** **25 GB** free storage space (for Docker image, PX4 SITL build targets, and ROS workspace build files).
+
+---
+
 ## Quickstart & Team Onboarding (3-Step Setup)
 
 To ensure consistency across different hardware and operating systems, the entire compilation and simulation environment is dockerized. Any teammate can launch an exact replica of the verified baseline in three commands:
 
 ### Step 1: Clone the Repository
-Clone this repository to your Ubuntu host machine:
+Clone this repository with all submodules to your host machine:
 ```bash
-git clone https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
+git clone --recurse-submodules https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
 cd ASTRA_AIR_MOUSE_
 ```
 
 ### Step 2: Launch the Automated Dev Container
-Run the included Docker dev starter script. This will automatically set up host X11 socket authorization, build the ROS Noetic + FUEL container image if needed, and drop you into an interactive bash shell with your workspace mounted live at `/home/developer/NIDAR`:
+Run the included Docker dev starter script. This will automatically set up host X11 socket authorization, build the ROS Noetic + Livox-SDK + FUEL container image if needed, and create/attach a persistent development container named `ros_workspace`:
 ```bash
 chmod +x scripts/docker_dev_start.sh
 ./scripts/docker_dev_start.sh
 ```
+
+> **Note on Container Lifecycle:** The dev container is persistent (`ros_workspace`). After exiting the container shell, you can re-attach at any time by running `./scripts/docker_dev_start.sh` or:
+> ```bash
+> docker start ros_workspace && docker exec -it ros_workspace /bin/bash
+> ```
 
 ### Step 3: Build & Run Simulation
 Inside the Docker interactive shell, execute the build scripts to compile the PX4 firmware and ROS packages:
@@ -43,11 +77,12 @@ source devel/setup.bash && cd ~/NIDAR
 ```directory
 NIDAR/
 ├── docker/                        # Docker environment definition for reproducible onboarding
-│   └── Dockerfile                 # Full Ubuntu 20.04 + ROS Noetic + MAVROS + FUEL toolchain
+│   └── Dockerfile                 # Full Ubuntu 20.04 + ROS Noetic + MAVROS + Livox-SDK + FUEL toolchain
 ├── catkin_ws/                     # Active ROS Workspace (built inside Docker)
 │   └── src/
 │       ├── FAST_LIO/              # Real-time LiDAR-inertial SLAM odometry & cloud registration
 │       ├── fuel/                  # Fast UAV Exploration (FUEL) hierarchical planner & FIESTA mapping
+│       ├── livox_ros_driver/      # Livox ROS driver for 3D LiDAR sensors
 │       └── velodyne_simulator/    # Velodyne VLP-16 gazebo plugins and descriptive meshes
 ├── config/                        # Extrinsic calibrations and RViz visualization profiles
 │   ├── fast_lio/nidar_sim.yaml
