@@ -1,0 +1,5 @@
+fuel/uav_simulator/Utils/rviz_plugins
+/home/developer/NIDAR/catkin_ws/devel/.private/rviz_plugins/lib/librviz_plugins.so /home/developer/NIDAR/catkin_ws/devel/lib/librviz_plugins.so
+/home/developer/NIDAR/catkin_ws/devel/.private/rviz_plugins/lib/pkgconfig/rviz_plugins.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/rviz_plugins.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/rviz_plugins/share/rviz_plugins/cmake/rviz_pluginsConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/rviz_plugins/cmake/rviz_pluginsConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/rviz_plugins/share/rviz_plugins/cmake/rviz_pluginsConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/rviz_plugins/cmake/rviz_pluginsConfig.cmake

@@ -1,0 +1,4 @@
+velodyne_simulator/velodyne_description
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_description/lib/pkgconfig/velodyne_description.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/velodyne_description.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_description/share/velodyne_description/cmake/velodyne_descriptionConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/velodyne_description/cmake/velodyne_descriptionConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_description/share/velodyne_description/cmake/velodyne_descriptionConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/velodyne_description/cmake/velodyne_descriptionConfig.cmake

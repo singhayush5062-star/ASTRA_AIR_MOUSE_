@@ -1,0 +1,5 @@
+fuel/fuel_planner/bspline_opt
+/home/developer/NIDAR/catkin_ws/devel/.private/bspline_opt/lib/libbspline_opt.so /home/developer/NIDAR/catkin_ws/devel/lib/libbspline_opt.so
+/home/developer/NIDAR/catkin_ws/devel/.private/bspline_opt/lib/pkgconfig/bspline_opt.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/bspline_opt.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/bspline_opt/share/bspline_opt/cmake/bspline_optConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/bspline_opt/cmake/bspline_optConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/bspline_opt/share/bspline_opt/cmake/bspline_optConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/bspline_opt/cmake/bspline_optConfig.cmake

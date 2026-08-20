@@ -1,0 +1,5 @@
+fuel/uav_simulator/Utils/waypoint_generator
+/home/developer/NIDAR/catkin_ws/devel/.private/waypoint_generator/lib/pkgconfig/waypoint_generator.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/waypoint_generator.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/waypoint_generator/lib/waypoint_generator/waypoint_generator /home/developer/NIDAR/catkin_ws/devel/lib/waypoint_generator/waypoint_generator
+/home/developer/NIDAR/catkin_ws/devel/.private/waypoint_generator/share/waypoint_generator/cmake/waypoint_generatorConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/waypoint_generator/cmake/waypoint_generatorConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/waypoint_generator/share/waypoint_generator/cmake/waypoint_generatorConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/waypoint_generator/cmake/waypoint_generatorConfig.cmake

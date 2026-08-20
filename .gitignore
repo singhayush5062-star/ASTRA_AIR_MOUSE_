@@ -6,8 +6,7 @@
 **/*.o
 **/*.so
 **/*.a
-catkin_ws/.catkin_tools/
-catkin_ws/.catkin_workspace
+
 
 # Hidden system and temporary editor files
 .DS_Store

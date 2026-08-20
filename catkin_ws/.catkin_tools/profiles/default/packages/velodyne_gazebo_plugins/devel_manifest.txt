@@ -1,0 +1,6 @@
+velodyne_simulator/velodyne_gazebo_plugins
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/libgazebo_ros_velodyne_gpu_laser.so /home/developer/NIDAR/catkin_ws/devel/lib/libgazebo_ros_velodyne_gpu_laser.so
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/libgazebo_ros_velodyne_laser.so /home/developer/NIDAR/catkin_ws/devel/lib/libgazebo_ros_velodyne_laser.so
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/lib/pkgconfig/velodyne_gazebo_plugins.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/velodyne_gazebo_plugins.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/share/velodyne_gazebo_plugins/cmake/velodyne_gazebo_pluginsConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/velodyne_gazebo_plugins/cmake/velodyne_gazebo_pluginsConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/velodyne_gazebo_plugins/share/velodyne_gazebo_plugins/cmake/velodyne_gazebo_pluginsConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/velodyne_gazebo_plugins/cmake/velodyne_gazebo_pluginsConfig-version.cmake
