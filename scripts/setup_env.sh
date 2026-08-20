@@ -26,3 +26,5 @@ export GAZEBO_PLUGIN_PATH="$ROOT_DIR/catkin_ws/devel/lib:${GAZEBO_PLUGIN_PATH}"
 export LD_LIBRARY_PATH="$ROOT_DIR/catkin_ws/devel/lib:${LD_LIBRARY_PATH}"
 export GAZEBO_PLUGIN_PATH="$ROOT_DIR/simulation/PX4-Autopilot-v1.14.3/build/px4_sitl_default/build_gazebo-classic:${GAZEBO_PLUGIN_PATH}"
 export LD_LIBRARY_PATH="$ROOT_DIR/simulation/PX4-Autopilot-v1.14.3/build/px4_sitl_default/build_gazebo-classic:${LD_LIBRARY_PATH}"
+export PATH="$ROOT_DIR/simulation/PX4-Autopilot-v1.14.3/build/px4_sitl_default/bin:${PATH}"
+

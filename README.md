@@ -126,3 +126,20 @@ NIDAR/
   local git repo in each place PX4's build tooling needs one — no action required, this runs automatically
   on every invocation and is a no-op once already bootstrapped.
 
+### `Unable to register with master node [http://localhost:11311]: master may not be running yet.` (during `./scripts/test_takeoff.sh`)
+* **Cause:** `roslaunch px4 mavros_posix_sitl.launch` died immediately on startup due to missing runtime prerequisites, causing `roscore` (ROS master) to shut down:
+  1. **Missing GeographicLib Dataset:** MAVROS failed with `[FATAL] UAS: GeographicLib exception: File not readable /usr/share/GeographicLib/geoids/egm96-5.pgm`. Since MAVROS is a required node, its crash kills `roslaunch` and `roscore`.
+  2. **Unbuilt PX4 SITL Binary / Missing GStreamer Dev Libraries:** The PX4 SITL target (`build/px4_sitl_default/bin/px4`) was missing or failed CMake configuration due to missing GStreamer dev packages (`libgstreamer1.0-dev`).
+* **Fix:** Install the missing GeographicLib geoid dataset and GStreamer dev libraries, then build PX4 SITL:
+  ```bash
+  # 1. Install missing GeographicLib geoid dataset
+  sudo /usr/sbin/geographiclib-get-geoids egm96-5
+
+  # 2. Install GStreamer development packages
+  sudo apt-get update && sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+  # 3. Build PX4 SITL binary target
+  ./scripts/build_px4.sh gazebo-classic_iris_vlp16
+  ```
+
+
