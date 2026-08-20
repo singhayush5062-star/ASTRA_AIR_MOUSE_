@@ -87,6 +87,7 @@ docker run -it --rm \
     astra-air-mouse-test1:clean \
     /bin/bash
 ```
+ignore setup.bash error
 
 ---
 
