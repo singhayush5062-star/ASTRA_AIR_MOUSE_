@@ -66,6 +66,40 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ############################################################
+# PX4 Python Build Dependencies
+############################################################
+
+RUN pip3 install --no-cache-dir \
+    argcomplete \
+    cerberus \
+    coverage \
+    "empy>=3.3" \
+    future \
+    "jinja2>=2.8" \
+    jsonschema \
+    kconfiglib \
+    lxml \
+    "matplotlib>=3.0" \
+    "numpy>=1.13" \
+    "nunavut>=1.1.0" \
+    packaging \
+    "pandas>=0.21" \
+    pkgconfig \
+    psutil \
+    pygments \
+    "wheel>=0.31.1" \
+    pymavlink \
+    pyros-genmsg \
+    pyserial \
+    "pyulog>=0.5.0" \
+    pyyaml \
+    requests \
+    "setuptools>=39.2.0" \
+    "six>=1.12.0" \
+    "toml>=0.9" \
+    "sympy>=1.10.1"
+
+############################################################
 # Initialize rosdep
 ############################################################
 
@@ -96,6 +130,11 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update && apt-get install -y \
     ros-noetic-mavros \
     ros-noetic-mavros-extras \
+    qtbase5-dev \
+    libqt5widgets5 \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libgstreamer-plugins-good1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ############################################################

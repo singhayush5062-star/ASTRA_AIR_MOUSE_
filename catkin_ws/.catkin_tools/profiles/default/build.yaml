@@ -1,5 +1,7 @@
 authors: []
-blacklist: []
+blacklist:
+- livox_ros_driver
+- livox_ros_driver_pkg
 build_space: build
 catkin_make_args: []
 cmake_args: []
