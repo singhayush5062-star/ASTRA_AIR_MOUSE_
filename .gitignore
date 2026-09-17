@@ -35,6 +35,14 @@ host_test.txt
 /nidar_airmouse.tar.gz
 /ros_workspace.tar.gz
 
+# YOLO weights auto-downloaded by scripts/test_gpu_inference.py when run from repo root
+/yolov8n.pt
+
+# Survivor detection model download zip is throwaway; extracted contents under
+# models/detection/ are what runtime loads and ARE committed.
+/PERSON_DETECTION_MODEL_V*.zip
+models/detection/**/__pycache__/
+
 
 
 # Claude Code graphify analysis cache - regenerable, never commit

@@ -10,15 +10,32 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   mavros_msgs
   quadrotor_msgs
+  message_generation
+)
+
+add_message_files(
+  FILES
+  Survivor.msg
+  SurvivorArray.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
 )
 
 catkin_package(
-  CATKIN_DEPENDS rospy std_msgs geometry_msgs nav_msgs sensor_msgs visualization_msgs mavros_msgs quadrotor_msgs
+  CATKIN_DEPENDS rospy std_msgs geometry_msgs nav_msgs sensor_msgs visualization_msgs mavros_msgs quadrotor_msgs message_runtime
 )
 
 catkin_install_python(PROGRAMS
   scripts/entry_detection_module.py
   scripts/apply_mission_config.py
+  scripts/survivor_detector.py
+  scripts/coverage_reporter.py
+  scripts/map_2d_slicer.py
+  scripts/grid_visualizer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

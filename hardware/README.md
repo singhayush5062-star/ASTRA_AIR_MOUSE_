@@ -1,7 +1,6 @@
 # ASTRA Hardware Verification Checklist
 
 Complete phase-by-phase hardware verification guide for the **ASTRA AirMouse** autonomous drone.
-
 ---
 
 ## The 1 Golden Rule

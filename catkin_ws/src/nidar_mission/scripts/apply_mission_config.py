@@ -501,6 +501,34 @@ def main():
 
     # --- Gazebo world -------------------------------------------------------
     ap_ = arena['model_pose']
+    survivors_cfg = cfg.get('survivors', {}) or {}
+    if survivors_cfg.get('enabled', False):
+        # Both keys are supported for backwards compatibility with an earlier
+        # actor-based generator; new configs use mesh_uri.
+        mesh_uri = survivors_cfg.get('mesh_uri',
+                                     survivors_cfg.get('skin_uri',
+                                     'file:///usr/share/gazebo-11/media/models/stand.dae'))
+        # stand.dae's mesh origin is at the pelvis (measured Z range -0.859..+0.857),
+        # not at the feet, so a pose z=0 sinks the character half a metre. mesh_z_offset
+        # lifts the visual so feet touch the ground. 0.86 is measured, not nominal.
+        mesh_z_offset = float(survivors_cfg.get('mesh_z_offset', 0.86))
+        coll_half = float(survivors_cfg.get('collision_half_extent', 0.20))
+        coll_height = float(survivors_cfg.get('collision_height', 1.75))
+        placements = survivors_cfg.get('placements', []) or []
+        survivors_block = '\n'.join(
+            SURVIVOR_BLOCK.format(name=s['name'],
+                                  x=s['x'], y=s['y'], yaw=s.get('yaw', 0.0),
+                                  mesh_uri=mesh_uri,
+                                  mesh_z_offset=mesh_z_offset,
+                                  coll_diameter=coll_half * 2.0,
+                                  coll_height=coll_height,
+                                  half_height=coll_height / 2.0)
+            for s in placements
+        )
+        if not survivors_block:
+            survivors_block = '    <!-- survivors enabled but no placements listed -->'
+    else:
+        survivors_block = '    <!-- survivors disabled in mission_config.yaml -->'
     world = WORLD_TEMPLATE.format(
         arena_model=arena['model_name'],
         ax=ap_['x'], ay=ap_['y'], az=ap_['z'],
@@ -509,6 +537,7 @@ def main():
                                     px=pad['center']['x'], py=pad['center']['y'])
                    if pad.get('enabled', True) else
                    '    <!-- launch pad disabled in mission_config.yaml -->'),
+        survivors_block=survivors_block,
         config_rel=os.path.relpath(CONFIG, REPO),
     )
     if os.path.exists(WORLD) and open(WORLD).read() == world:
@@ -542,6 +571,40 @@ PAD_BLOCK = """    <!-- The pad model self-centres (its own origin is the pad ce
       <pose>{px} {py} 0 0 0 0</pose>
     </include>"""
 
+# One SDF static <model> per survivor. The mesh is stand.dae from
+# /usr/share/gazebo-11/media/models loaded as a plain <visual>, rendered at
+# its bind pose (standing). This is more robust than SDF <actor>, which the
+# Gazebo classic renderer refuses to draw without a <animation> block that
+# references a skeleton -- causing "only 1 of 6 survivors visible" on
+# 2026-09-11, run 20260911_094635.
+#
+# A small box collision keeps the drone from flying through the mannequin
+# (which would be geometry-invisible without a collision), but does not
+# defeat the drone's own inflation margin.
+SURVIVOR_BLOCK = """    <model name="{name}">
+      <static>true</static>
+      <pose>{x} {y} 0 0 0 {yaw}</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 {mesh_z_offset} 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>{mesh_uri}</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 {half_height} 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>{coll_diameter} {coll_diameter} {coll_height}</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>"""
+
 WORLD_TEMPLATE = """<?xml version="1.0" ?>
 <!-- GENERATED FILE - do not edit by hand.
      Rendered from {config_rel} by nidar_mission/scripts/apply_mission_config.py.
@@ -564,6 +627,8 @@ WORLD_TEMPLATE = """<?xml version="1.0" ?>
     </include>
 
 {pad_block}
+
+{survivors_block}
 
     <physics name="default_physics" default="true" type="ode">
       <max_step_size>0.004</max_step_size>

@@ -11,6 +11,22 @@
 
 ---
 
+## Code Import & Reuse Strategy
+
+To ensure zero duplicate code creation and exact parity with system simulation/verification math:
+- All Phase 1 bringup scripts in `hardware/phase1/scripts/` import directly from existing root workspace scripts:
+  - [`scripts/verify_components.py`](file:///c:/Users/ASUS/Desktop/ASTRA_AIR_MOUSE_/scripts/verify_components.py): Reused for prop clearance math, quaternion/RPY transformations, TFmini beam elevation, camera aiming vectors, and LiDAR pointcloud validation.
+  - [`scripts/check_mount_geometry.py`](file:///c:/Users/ASUS/Desktop/ASTRA_AIR_MOUSE_/scripts/check_mount_geometry.py): Reused for rotated 3D camera mesh z-extents and standoff leg clearance calculations.
+  - [`scripts/verify_flight.py`](file:///c:/Users/ASUS/Desktop/ASTRA_AIR_MOUSE_/scripts/verify_flight.py): Reused for prop collision radius math (`collision_radius()`).
+
+## Persistent Execution & Implementation Logging
+
+All execution runs and gating decisions are automatically recorded in:
+- [`hardware/reports/HARDWARE_STATUS_REPORT.md`](file:///c:/Users/ASUS/Desktop/ASTRA_AIR_MOUSE_/hardware/reports/HARDWARE_STATUS_REPORT.md)
+- [`hardware/reports/HARDWARE_IMPLEMENTATION_LOG.md`](file:///c:/Users/ASUS/Desktop/ASTRA_AIR_MOUSE_/hardware/reports/HARDWARE_IMPLEMENTATION_LOG.md)
+
+---
+
 ## 1. System & Environment Test
 
 ### Objective

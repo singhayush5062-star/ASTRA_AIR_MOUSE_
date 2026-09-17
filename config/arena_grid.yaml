@@ -1,0 +1,41 @@
+# NIDAR arena grid definition
+# --------------------------------------------------------------------------
+# The competition brief §3 specifies "2 m x 2 m rooms" and requires each
+# survivor to be tagged with "the grid coordinate or grid box" they sit in
+# (§6). This file is that grid's canonical definition, shared by:
+#
+#   * survivor_detector.py   -- snaps a raycasted world point to grid_(x, y)
+#   * coverage_reporter.py   -- prints the arena area alongside the 20%
+#                               growth thresholds
+#   * (future) map_2d_publisher / GCS overlay -- draws the grid lines
+#
+# Grid cell (i, j) has centre
+#   world_x = origin_x + (i + 0.5) * cell_size
+#   world_y = origin_y + (j + 0.5) * cell_size
+# and covers the half-open range
+#   world_x in [origin_x + i * cell_size,  origin_x + (i+1) * cell_size)
+#   world_y in [origin_y + j * cell_size,  origin_y + (j+1) * cell_size)
+# so `floor((pos - origin) / cell_size)` uniquely names the cell containing pos.
+#
+# KEEP IN SYNC with nidar/detection.grid_size and nidar/survivors.grid_size
+# in catkin_ws/src/nidar_mission/config/mission_config.yaml. apply_mission_
+# config.py does not touch this file (no downstream regeneration), so the
+# constants here have to match by hand -- verify on any grid change.
+
+arena_grid:
+  # Grid origin in world coordinates. Set to the arena's south-west corner
+  # snapped to the cell size, so world (-7.0, -7.0) is grid cell (0, 0).
+  # arena bounds in mission_config.yaml are [-7.5, 7.5] on both axes; the
+  # 0.5 m of unaccounted-for margin on each edge sits inside the outer wall
+  # thickness and is never open floor.
+  origin_x: -7.0
+  origin_y: -7.0
+
+  # Side length of one grid cell in metres. MUST match mission_config.yaml.
+  cell_size: 2.0
+
+  # Number of cells along each axis. 7 x 7 == 49 cells covering 14 x 14 m of
+  # the 15 x 15 m arena. survivor_detector.py refuses to publish a tag whose
+  # cell falls outside this range -- the raycast landed outside the arena.
+  cells_x: 7
+  cells_y: 7

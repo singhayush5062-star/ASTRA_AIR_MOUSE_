@@ -16,6 +16,19 @@ else
 fi
 
 echo "============================================================"
+echo "[1.5/3] Checking for NVIDIA GPU + Container Toolkit..."
+echo "============================================================"
+GPU_ARGS=()
+if command -v nvidia-smi >/dev/null 2>&1 && docker info 2>/dev/null | grep -qi nvidia; then
+    echo "NVIDIA runtime detected. Container will launch with --gpus all."
+    GPU_ARGS=(--gpus all)
+else
+    echo "Warning: NVIDIA Container Toolkit not detected (or 'docker info' does not list the"
+    echo "nvidia runtime). Launching without GPU access -- inference will fall back to CPU."
+    echo "Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"
+fi
+
+echo "============================================================"
 echo "[2/3] Checking for Docker development image ($IMAGE_NAME)..."
 echo "============================================================"
 if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
@@ -45,6 +58,7 @@ else
         --name "$CONTAINER_NAME" \
         --ipc=host \
         --privileged \
+        "${GPU_ARGS[@]}" \
         -e DISPLAY="${DISPLAY:-:0}" \
         -e LIBGL_ALWAYS_SOFTWARE=0 \
         -e QT_X11_NO_MITSHM=1 \

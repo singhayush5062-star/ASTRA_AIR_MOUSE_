@@ -16,6 +16,11 @@ ENV TZ=Etc/UTC
 
 ############################################################
 # Basic Linux packages
+#
+# psmisc supplies killall, which scripts/test_takeoff.sh uses to clear the
+# previous run. Without it that cleanup line fails silently (stderr is
+# discarded and `|| true` swallows the error) and every re-run inherits the
+# old rosmaster/gzserver/px4/mavros_node processes.
 ############################################################
 
 RUN apt-get update && apt-get install -y \
@@ -40,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     iputils-ping \
     htop \
+    psmisc \
     && rm -rf /var/lib/apt/lists/*
 
 ############################################################
@@ -90,13 +96,41 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ############################################################
+# PX4 SITL (Gazebo Classic) build dependencies
+#
+# Matches simulation/PX4-Autopilot-v1.14.3/Tools/setup/ubuntu.sh. Without the
+# gstreamer -dev packages, sitl_gazebo-classic's CMake configure fails with
+# GSTREAMER_APP_LIBRARIES set to NOTFOUND (gazebo11/libgazebo11-dev already
+# come in via ros-noetic-desktop-full above).
+############################################################
+
+RUN apt-get update && apt-get install -y \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    dmidecode \
+    libimage-exiftool-perl \
+    && rm -rf /var/lib/apt/lists/*
+
+############################################################
 # MAVROS
 ############################################################
 
 RUN apt-get update && apt-get install -y \
     ros-noetic-mavros \
     ros-noetic-mavros-extras \
+    geographiclib-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# MAVROS' UAS node hard-requires the EGM96-5 geoid grid at
+# /usr/share/GeographicLib/geoids/egm96-5.pgm; without it mavros aborts as a
+# FATAL/REQUIRED process the instant it starts (GeographicLib exception),
+# which takes down the whole SITL roslaunch with it.
+RUN geographiclib-get-geoids egm96-5
 
 ############################################################
 # TF / Navigation / Common ROS packages
@@ -141,6 +175,40 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK.git /tmp/Livox-SDK && \
     cmake .. && make -j$(nproc) && make install && \
     ldconfig && \
     rm -rf /tmp/Livox-SDK
+
+############################################################
+# NVIDIA GPU Runtime Support
+#
+# These env vars are read by the NVIDIA Container Toolkit on the host when
+# the container is launched with `--gpus all` (see scripts/docker_dev_start.sh).
+# They are no-ops on a CPU-only host / without --gpus.
+############################################################
+
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+
+############################################################
+# GPU Inference Stack (PyTorch + Ultralytics/YOLO)
+#
+# CUDA runtime ships inside the torch wheel itself, so no system CUDA
+# toolkit install is required here -- only a host driver + nvidia-container-
+# toolkit compatible with CUDA 12.1 (any driver >= 525 works).
+############################################################
+
+RUN pip3 install --no-cache-dir \
+    torch==2.2.2 torchvision==0.17.2 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# >= 8.3.0 is required for YOLO11/YOLO26 architectures (C3k2 module).
+# PERSON_DETECTION_MODEL_V3 was exported with 8.4.120, so 8.4.x is the safe floor.
+#
+# The `ncnn` package is the CPU inference backend the deployed detector uses
+# (see mission_config.yaml, detection.model). Without it ultralytics will
+# auto-download and pip-install ncnn on first NCNN load, which is a 100+s
+# stall that also fails in an air-gapped competition environment (§7).
+RUN pip3 install --no-cache-dir \
+    "ultralytics>=8.4.120,<8.5" \
+    ncnn
 
 ############################################################
 # PX4 Autopilot & ROS Python Dependencies

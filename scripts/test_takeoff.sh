@@ -20,7 +20,10 @@ SPAWN_X=${2:-$(cfg "c['launch_pad']['center']['x']" 0.0)}
 SPAWN_Y=${3:-$(cfg "c['launch_pad']['center']['y']" -6.5)}
 SPAWN_Z=${4:-$(cfg "round(c['launch_pad']['thickness']+c['vehicle']['belly_clearance'],3)" 0.19)}
 SPAWN_YAW=${5:-$(cfg "c['launch_pad']['spawn_yaw']" 1.5708)}
-VEHICLE=${VEHICLE:-$(cfg "c['vehicle']['model']" iris_vlp16)}
+# The ":-" fallback fires when PyYAML or mission_config.yaml is unavailable, so it must name the
+# CURRENT airframe. It said iris_vlp16 well after the X500 migration, which would have silently
+# flown a 0.386 m collision radius through an arena whose median corridor does not fit it.
+VEHICLE=${VEHICLE:-$(cfg "c['vehicle']['model']" x500_vlp16)}
 # RViz is controlled separately from the Gazebo GUI and defaults to OFF, because it is by far the
 # most expensive optional process in this stack: measured at ~290% CPU, i.e. roughly 3 of this
 # machine's 12 hardware threads, purely for visualisation. Leaving it off gives FAST-LIO and

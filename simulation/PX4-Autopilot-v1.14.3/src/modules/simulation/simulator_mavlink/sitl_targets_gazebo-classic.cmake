@@ -103,6 +103,7 @@ if(gazebo_FOUND)
 		typhoon_h480
 		uuv_bluerov2_heavy
 		uuv_hippocampus
+		x500_vlp16
 	)
 
 	set(worlds

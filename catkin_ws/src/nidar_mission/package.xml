@@ -24,4 +24,11 @@
   <!-- PositionCommand, the message /planning/pos_cmd carries -->
   <depend>quadrotor_msgs</depend>
   <depend>tf</depend>
+  <!-- Survivor.msg / SurvivorArray.msg for Phase 4 detector -->
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <!-- Camera frames + tf lookups for the 3D localisation -->
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
 </package>

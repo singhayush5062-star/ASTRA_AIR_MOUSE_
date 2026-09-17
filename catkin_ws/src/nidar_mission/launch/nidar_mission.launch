@@ -7,15 +7,43 @@
        logic on top.
 
        Everything under /nidar/... comes from one file, so the EDM, the mission manager and
-       (later) the survivor detector all read the same numbers. Values that cannot be served
-       from the parameter server - FAST-LIO's own YAML, FUEL's roslaunch literals, the Gazebo
+       the survivor detector all read the same numbers. Values that cannot be served from
+       the parameter server - FAST-LIO's own YAML, FUEL's roslaunch literals, the Gazebo
        world - are rendered by scripts/apply_mission_config.py instead; run that after
        editing the config. -->
 
   <arg name="config" default="$(find nidar_mission)/config/mission_config.yaml"/>
+  <!-- arena_grid.yaml lives at the repo root's config/ dir. $(find nidar_mission) resolves
+       to catkin_ws/src/nidar_mission, so three '..' walks back to the repo root. -->
+  <arg name="grid_config" default="$(find nidar_mission)/../../../config/arena_grid.yaml"/>
   <arg name="entry_enabled" default="true"/>
+  <arg name="detection_enabled" default="true"/>
+  <arg name="coverage_report_enabled" default="true"/>
+  <arg name="map_2d_enabled" default="true"/>
+  <arg name="grid_visualizer_enabled" default="true"/>
 
   <rosparam command="load" file="$(arg config)"/>
+  <rosparam command="load" file="$(arg grid_config)"/>
+
+  <!-- TF: expose the camera sensor's look direction as `camera_link` in the ROS TF tree.
+
+       The x500_vlp16 SDF defines two nested poses: the link's pose relative to base_link
+       (0.0231 0.0043 -0.0518, RPY 3.1332 -0.0015 -3.0737) and the sensor's pose within
+       that link (0 0 0, RPY 0 -0.259724 -3.0715). Gazebo composes both internally to aim
+       the sensor at world (cos15, 0, -sin15) = -15 deg elevation, but nothing publishes
+       the composition to ROS TF. So the image header claims frame_id="camera_link"
+       against a frame that never existed. The survivor detector's back-projection then
+       cannot resolve the ray at all.
+
+       Two chained static_transform_publishers add exactly the missing links. The
+       intermediate name `camera_mount_link` is uninteresting but shows up cleanly in
+       `rosrun tf view_frames`. static_transform_publisher args are (x y z yaw pitch roll
+       parent child). Note that is YPR, NOT the SDF's RPY, so the yaw/pitch/roll below
+       are re-ordered accordingly. -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_mount_tf"
+        args="0.0231 0.0043 -0.0518 -3.0737 -0.0015 3.1332 base_link camera_mount_link"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_tf"
+        args="0 0 0 -3.0715 -0.259724 0 camera_mount_link camera_link"/>
 
   <!-- Autonomous arena entry. Drives /planning/pos_cmd (validated by
        flight_envelope_guard.py) from the launch pad, through the arena opening, and hands
@@ -23,4 +51,66 @@
   <node if="$(arg entry_enabled)"
         pkg="nidar_mission" type="entry_detection_module.py" name="entry_detection_module"
         output="screen"/>
+
+  <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26n
+       at 5 Hz (mission_config.yaml: nidar/detection/detect_hz), back-projects to the
+       ground plane, tracks with a 0.75 m NN radius, publishes latched /survivors on
+       three consistent detections. Ground-truth-vs-tag comparison is printed inline
+       when /gazebo/model_states is available.
+
+       All private params here are mirrored from the loaded nidar/detection/* keys, but
+       set explicitly so a config typo does not silently fall back to the code default. -->
+  <node if="$(arg detection_enabled)"
+        pkg="nidar_mission" type="survivor_detector.py" name="survivor_detector"
+        output="screen">
+    <param name="enabled" value="true"/>
+    <!-- Repo-relative path; the node resolves it against the repo root itself.
+         NCNN (a directory, not a file) instead of best.pt so CPU inference does
+         not fight Gazebo for the GPU. See mission_config.yaml for the rationale. -->
+    <param name="model_path" value="models/detection/PERSON_DETECTION_MODEL_V3/best_ncnn_model"/>
+    <param name="detect_hz" value="5.0"/>
+    <param name="confidence_threshold" value="0.55"/>
+    <param name="device" value="cpu"/>
+    <param name="association_radius" value="0.75"/>
+    <param name="confirmation_threshold" value="3"/>
+    <param name="stale_timeout_s" value="10.0"/>
+    <param name="max_range_m" value="8.0"/>
+    <param name="input_topic" value="/camera/image_raw"/>
+    <param name="camera_info_topic" value="/camera/camera_info"/>
+    <param name="output_topic" value="/survivors"/>
+    <param name="marker_topic" value="/survivor_markers"/>
+    <param name="ground_truth_check" value="true"/>
+  </node>
+
+  <!-- Phase 4 coverage reporter. One terminal line per 20% coverage growth,
+       carrying both percentage and m^2 breakdown. Exactly what the operator
+       needs while the GCS is not yet wired up. -->
+  <node if="$(arg coverage_report_enabled)"
+        pkg="nidar_mission" type="coverage_reporter.py" name="coverage_reporter"
+        output="screen"/>
+
+  <!-- Phase 5 live 2D map. Subscribes to /sdf_map/occupancy_all, slices at
+       cruise altitude, publishes nav_msgs/OccupancyGrid at /map_2d.
+
+       Publish rate 2 Hz is chosen to match the phase plan §5.1 target and
+       to stay under the GCS bandwidth budget (§6.2: <4 Mbps combined). At
+       150x150 cells x 2 Hz that is ~45 kB/s uncompressed. -->
+  <node if="$(arg map_2d_enabled)"
+        pkg="nidar_mission" type="map_2d_slicer.py" name="map_2d_slicer"
+        output="screen">
+    <param name="publish_rate" value="2.0"/>
+    <param name="z_slice_min" value="0.3"/>
+    <param name="z_slice_max" value="1.9"/>
+    <param name="cloud_topic" value="/sdf_map/occupancy_all"/>
+  </node>
+
+  <!-- Phase 5 grid overlay and survivor tag publisher. Publishes
+       /grid_markers (2 m grid lines + A1..G7 cell labels) and /survivor_tags
+       (per-confirmed-survivor sphere + text cell tag). Both are latched
+       MarkerArrays so a late-joining GCS gets the full set. -->
+  <node if="$(arg grid_visualizer_enabled)"
+        pkg="nidar_mission" type="grid_visualizer.py" name="grid_visualizer"
+        output="screen">
+    <param name="frame_id" value="map"/>
+  </node>
 </launch>

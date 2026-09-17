@@ -27,6 +27,145 @@
       <pose>0.0 -9.5 0 0 0 0</pose>
     </include>
 
+    <model name="survivor_1">
+      <static>true</static>
+      <pose>-4.0 -4.0 0 0 0 1.5708</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <model name="survivor_2">
+      <static>true</static>
+      <pose>-6.0 -2.0 0 0 0 0.0</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <model name="survivor_3">
+      <static>true</static>
+      <pose>4.0 -4.0 0 0 0 3.1416</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <model name="survivor_4">
+      <static>true</static>
+      <pose>6.0 -2.0 0 0 0 0.7854</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <model name="survivor_5">
+      <static>true</static>
+      <pose>-4.0 6.0 0 0 0 -1.5708</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <model name="survivor_6">
+      <static>true</static>
+      <pose>4.0 4.0 0 0 0 2.3562</pose>
+      <link name="body">
+        <visual name="visual">
+          <pose>0 0 0.86 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0.875 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.4 0.4 1.75</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+
     <physics name="default_physics" default="true" type="ode">
       <max_step_size>0.004</max_step_size>
       <real_time_factor>1.0</real_time_factor>

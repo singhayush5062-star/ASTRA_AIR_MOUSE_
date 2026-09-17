@@ -42,6 +42,13 @@ class MissionState:
     ENTRY_CONFIRMATION = "ENTRY_CONFIRMATION"
     EXPLORATION = "EXPLORATION"
     RETURN = "RETURN"
+    # Explicit final approach to the launch pad. Runs BEFORE handing to PX4
+    # AUTO.LAND. Ensures the touchdown is on the pad rather than wherever
+    # AUTO.LAND happens to be issued -- run 20260911_101520 saw PX4 fire its
+    # own "Failsafe: blind land" at t=527 because coverage plateaued below the
+    # 97% floor and EDM never reached RETURN, leaving the vehicle to be landed
+    # mid-arena by PX4's failsafe rather than on the pad by us.
+    DESCEND = "DESCEND"
     LAND = "LAND"
 
 
@@ -362,6 +369,27 @@ class EntryDetectionModuleNode:
         self.max_return_duration = rospy.get_param(
             '~max_return_duration', rospy.get_param('/nidar/return/max_duration', 240.0))
         self.landed_requested = False
+
+        # ---- DESCEND leg ------------------------------------------------------------
+        # DESCEND owns the last approach to the pad and the handoff to AUTO.LAND. It exists
+        # because RETURN commanding AUTO.LAND directly landed the vehicle at whatever pose
+        # RETURN happened to finish at (or, when RETURN timed out, mid-arena) -- so a run
+        # that never satisfied the coverage completion condition ended with a PX4 blind land
+        # rather than a controlled touchdown on the pad.
+        #
+        # State machine:
+        #   1. If the vehicle is > descend_accept from the pad centre, command pos_cmd at
+        #      the pad centre (camera_init origin) and wait for it to close in.
+        #   2. Once within descend_accept OR after descend_timeout, hand off to AUTO.LAND.
+        #      The guard's z window bottoms at 1.45 m so we cannot descend on pos_cmd; the
+        #      last metre is PX4's job either way. What DESCEND adds is that PX4 gets asked
+        #      only when the vehicle is where it belongs, not from a stall inside the maze.
+        # Pad centre in camera_init is (0, 0) by construction (spawn plants camera_init).
+        self.descend_accept = rospy.get_param(
+            '~descend_accept', rospy.get_param('/nidar/descend/accept_radius', 0.40))
+        self.descend_timeout = rospy.get_param(
+            '~descend_timeout', rospy.get_param('/nidar/descend/timeout', 15.0))
+        self.descend_start_time = None
 
         # Integrated position setpoint. See create_position_cmd() for why the EDM commands
         # position rather than the velocity setpoints it used to publish.
@@ -994,9 +1022,15 @@ class EntryDetectionModuleNode:
         # not simulated, but a vehicle wandering the arena on a stale trail is a crash waiting
         # to happen. Land where we are instead.
         if rospy.Time.now() > self.return_deadline:
-            rospy.logerr("[EDM] RETURN timed out after %.0f s at waypoint %d/%d - landing here.",
+            # A RETURN timeout means the trail was not walked home. Do NOT jump straight to
+            # AUTO.LAND -- that would descend at whatever mid-arena pose the vehicle happens
+            # to be in, which is exactly the "PX4 blind-land somewhere in the maze" failure
+            # mode seen in run 20260911_101520. DESCEND owns the last leg: it steers the
+            # vehicle to the pad centre (or, if the pad is genuinely unreachable, holds and
+            # logs before ceding to AUTO.LAND with a 15 s safety cap).
+            rospy.logerr("[EDM] RETURN timed out after %.0f s at waypoint %d/%d - handing to DESCEND.",
                          self.max_return_duration, self.return_wp, len(self.return_path))
-            self.transition_to(MissionState.LAND)
+            self.transition_to(MissionState.DESCEND)
             return
 
         # Advance through every waypoint already satisfied, not just the next one: after a
@@ -1009,8 +1043,8 @@ class EntryDetectionModuleNode:
                 break
 
         if self.return_wp >= len(self.return_path):
-            rospy.logwarn("[EDM] RETURN complete: over the pad. Landing.")
-            self.transition_to(MissionState.LAND)
+            rospy.logwarn("[EDM] RETURN complete: over the pad. Handing to DESCEND.")
+            self.transition_to(MissionState.DESCEND)
             return
 
         tx, ty = self.return_path[self.return_wp]
@@ -1042,6 +1076,64 @@ class EntryDetectionModuleNode:
             5.0, "[EDM] RETURN: waypoint %d/%d, %.2f m to go, %.0f s left",
             self.return_wp, len(self.return_path), d,
             (self.return_deadline - rospy.Time.now()).to_sec())
+
+    def run_descend(self, dt):
+        """Fly the final approach to the pad centre before handing off to AUTO.LAND.
+
+        This exists specifically to fix the "touched down mid-arena" failure: a RETURN
+        that overshoots or times out used to jump straight to AUTO.LAND, so PX4 descended
+        vertically from whatever pose the vehicle was stopped at. DESCEND commands one more
+        pos_cmd at the pad centre (camera_init origin, by construction), waits for the
+        vehicle to close in, and only then issues AUTO.LAND. If the pad turns out to be
+        unreachable within descend_timeout the hand-off still fires -- a controlled
+        AUTO.LAND is better than orbiting until PX4 blind-lands us.
+        """
+        if self.uav_pose is None:
+            return
+        if self.descend_start_time is None:
+            self.descend_start_time = rospy.Time.now()
+            rospy.logwarn("[EDM] DESCEND: pad approach begun; commanding (0, 0) camera_init.")
+
+        # Distance to the pad in camera_init (pad == origin by construction).
+        dist = math.hypot(self.uav_pose[0], self.uav_pose[1])
+        elapsed = (rospy.Time.now() - self.descend_start_time).to_sec()
+
+        if dist <= self.descend_accept:
+            rospy.logwarn("[EDM] DESCEND: over the pad (%.2f m from centre). Requesting AUTO.LAND.",
+                          dist)
+            self.transition_to(MissionState.LAND)
+            return
+        if elapsed >= self.descend_timeout:
+            # Timing out is a genuine failure -- the vehicle could not get to the pad. Land
+            # anyway rather than orbit indefinitely, but log loudly enough that the operator
+            # (and any post-run analysis) can see the touchdown was off-pad.
+            rospy.logerr("[EDM] DESCEND: %.1f s elapsed and still %.2f m from the pad; "
+                         "AUTO.LAND-ing here.", elapsed, dist)
+            self.transition_to(MissionState.LAND)
+            return
+
+        # Lead-limited hop toward the pad, same pattern as RETURN. Prevents commanding a
+        # large step the guard would clamp anyway.
+        lead = 0.6
+        ex, ey = -self.uav_pose[0], -self.uav_pose[1]
+        d = math.hypot(ex, ey)
+        if d > lead:
+            ex, ey = ex * lead / d, ey * lead / d
+        self.setpoint_xy = [self.uav_pose[0] + ex, self.uav_pose[1] + ey]
+
+        cmd = PositionCommand()
+        cmd.header.stamp = rospy.Time.now()
+        cmd.header.frame_id = "camera_init"
+        cmd.position.x = self.setpoint_xy[0]
+        cmd.position.y = self.setpoint_xy[1]
+        cmd.position.z = self.cruise_z_camera_init
+        cmd.yaw = self.entry_yaw if self.entry_yaw is not None else self.uav_yaw
+        cmd.yaw_dot = 0.0
+        cmd.trajectory_id = 4
+        self.pub_pos_cmd.publish(cmd)
+        rospy.loginfo_throttle(
+            2.0, "[EDM] DESCEND: %.2f m to pad centre, %.1f s left before forced LAND.",
+            dist, self.descend_timeout - elapsed)
 
     def run_land(self):
         """Hand the descent to PX4 rather than flying it down on position setpoints.
@@ -1316,6 +1408,9 @@ class EntryDetectionModuleNode:
 
         elif self.state == MissionState.RETURN:
             self.run_return(dt)
+
+        elif self.state == MissionState.DESCEND:
+            self.run_descend(dt)
 
         elif self.state == MissionState.LAND:
             self.run_land()

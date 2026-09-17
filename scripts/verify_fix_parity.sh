@@ -38,7 +38,16 @@ echo "--- launch XML well-formedness ---"
 # several minutes of wall clock looking like one before the actual cause (a "--" introduced by
 # an edit to algorithm.xml) was found. Catch it before launch, not by staring at telemetry.
 for xml in "$WS"/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml \
-           "$WS"/src/fuel/fuel_planner/exploration_manager/launch/exploration.launch; do
+           "$WS"/src/fuel/fuel_planner/exploration_manager/launch/exploration.launch \
+           "$WS"/src/nidar_mission/launch/nidar_mission.launch \
+           launch/nidar_fuel_upstream.launch \
+           launch/fast_lio/nidar_mapping.launch; do
+    # nidar_mission.launch went malformed twice in the 2026-09-11 session, both
+    # times a bare "--" inside an XML comment which parses in vim but roslaunch
+    # refuses with a top-level RLException that leaves the drone hovering while
+    # FUEL sits in WAIT_TRIGGER (the mission_manager and EDM never launch, so
+    # nothing publishes to /waypoint_generator/waypoints). See run
+    # 20260911_094635.
     if [ -f "$xml" ]; then
         if python3 -c "import xml.dom.minidom as m; m.parse('$xml')" 2>/tmp/xmlcheck_err; then
             echo "ok            well-formed  $xml"
@@ -67,5 +76,81 @@ for pair in "$NODE:$FSM"; do
     if [ "$s" -nt "$b" ]; then echo "STALE         $b is older than $s -- rebuild"; fail=1
     else echo "ok            $b newer than $s"; fi
 done
+
+echo "--- phase 4: survivor detector chain ---"
+DETECTOR=$WS/src/nidar_mission/scripts/survivor_detector.py
+COVERAGE=$WS/src/nidar_mission/scripts/coverage_reporter.py
+MAP2D=$WS/src/nidar_mission/scripts/map_2d_slicer.py
+GRIDVIZ=$WS/src/nidar_mission/scripts/grid_visualizer.py
+SURVIVOR_MSG_PY=$WS/devel/lib/python3/dist-packages/nidar_mission/msg/_Survivor.py
+MODEL_PT=models/detection/PERSON_DETECTION_MODEL_V3/best.pt
+# Model weights: an absent .pt turns the detector node into a FATAL, which
+# under nidar_mission.launch (required=false by default for output=screen)
+# would silently vanish and leave the run looking like a healthy exploration
+# with zero detections -- the same failure mode the stop-handshake bug had.
+if [ -f "$MODEL_PT" ]; then echo "ok            detector model  in  $MODEL_PT"
+else echo "ABSENT        detector model at $MODEL_PT -- unzip PERSON_DETECTION_MODEL_V3"
+     fail=1
+fi
+# Source: the strings we require the detector to log, so a silent rewrite that
+# dropped e.g. the FAST-LIO smoke assertion or the survivor terminal line is
+# caught before the flight, not by staring at logs after it.
+chk "detector node file"        "class SurvivorDetector"           "$DETECTOR"
+chk "detector: 5Hz timer"       "1.0 / self.detect_hz"             "$DETECTOR"
+chk "detector: ground-plane BP" "_backproject_ground"              "$DETECTOR"
+chk "detector: NN tracker"      "association_radius"               "$DETECTOR"
+chk "detector: confirmation"    "confirmation_threshold"           "$DETECTOR"
+chk "detector: [SURVIVOR] log"  "\[SURVIVOR\] id=%d"               "$DETECTOR"
+chk "detector: FAST-LIO smoke"  "smoke assertion FAILED"           "$DETECTOR"
+chk "coverage: 20% report"      "REACHED at t=%.1fs"               "$COVERAGE"
+chk "coverage: 5 thresholds"    "20.0, 40.0, 60.0, 80.0, 95.0"     "$COVERAGE"
+
+# Landing pad fix: DESCEND state between RETURN and LAND. A RETURN that
+# overshoots or times out used to jump straight to AUTO.LAND, leaving PX4
+# to blind-land mid-arena (see run 20260911_101520 t=527). DESCEND flies to
+# (0, 0) camera_init first.
+EDM_SRC=$WS/src/nidar_mission/scripts/entry_detection_module.py
+chk "EDM: DESCEND state"        "DESCEND = \"DESCEND\""            "$EDM_SRC"
+chk "EDM: run_descend"          "def run_descend"                   "$EDM_SRC"
+chk "EDM: RETURN->DESCEND"      "MissionState.DESCEND"              "$EDM_SRC"
+
+echo "--- phase 5: live 2D map + tagging ---"
+# The OccupancyGrid publisher + grid overlay + survivor tag publisher.
+# Absent = brief §5's "live 2D map generated during flight, legible as a
+# floorplan, with survivors tagged on it" is not met.
+chk "map_2d_slicer node file"   "class Map2DSlicer"                 "$MAP2D"
+chk "map_2d: /map_2d publisher" "'/map_2d'"                         "$MAP2D"
+chk "map_2d: OccupancyGrid"     "nav_msgs.msg import OccupancyGrid" "$MAP2D"
+chk "grid_visualizer node file" "class GridVisualizer"              "$GRIDVIZ"
+chk "grid_viz: /grid_markers"   "'/grid_markers'"                   "$GRIDVIZ"
+chk "grid_viz: /survivor_tags"  "'/survivor_tags'"                  "$GRIDVIZ"
+# Cell IDs use the phase plan A1..G7 convention. Missing means the grid
+# overlay would render lines but no labels, and the GCS user cannot read
+# off a cell to relay to rescue teams.
+chk "grid_viz: cell label"      "def _cell_label"                   "$GRIDVIZ"
+# Generated Python messages: catkin build outputs them under devel/lib/...;
+# their absence means the message-generation stage never ran (bad CMake, or
+# the workspace has not been rebuilt after adding msg files).
+if [ -f "$SURVIVOR_MSG_PY" ]; then echo "ok            Survivor.msg python in $SURVIVOR_MSG_PY"
+else echo "ABSENT        Survivor.msg python (rebuild nidar_mission)"; fail=1
+fi
+# Ground truth: the world file has to actually contain the survivor blocks
+# or the detector has nothing to detect. Accept either the earlier <actor>
+# variant or the current static <model> variant; both mean "at least one
+# survivor is spawned by the world at load".
+WORLD=nidar_competition.world
+if [ -f "$WORLD" ]; then
+    n_models=$(grep -c '<model name="survivor_' "$WORLD")
+    n_actors=$(grep -c '<actor name="survivor_' "$WORLD")
+    n=$((n_models + n_actors))
+    if [ "$n" -ge 6 ]; then
+        echo "ok            $n survivor block(s) in world (models=$n_models actors=$n_actors)"
+    elif [ "$n" -ge 1 ]; then
+        echo "WARN          only $n survivor block(s) in world (expected 6); re-run apply_mission_config.py"
+    else
+        echo "ABSENT        no survivor models in $WORLD -- rerun apply_mission_config.py"
+        fail=1
+    fi
+fi
 [ $fail -eq 0 ] && echo "PARITY OK" || echo "PARITY FAILED -- do not trust this run"
 exit $fail
