@@ -31,5 +31,27 @@ while true; do
     pin_all_threads "fastlio_mapping" "0,1"
     pin_all_threads "flight_envelope_guard.py" "6,7"
     pin_all_threads "relay_odometry.py" "6,7"
+
+    # Phase 4 + Phase 5 mission-layer Python nodes. Every one of these was
+    # UNPINNED before 2026-09-11 and free to schedule on FAST-LIO's cores
+    # (0,1). Comparing run 20260911_103244 (before survivor_detector /
+    # coverage_reporter were added) to 20260911_162727 (after Phase 5 landed):
+    # plan_fail rose from 1043 to 28523 (27x), no_path from 990 to 12659, and
+    # localisation p90 error blew out to 5.4 m -- classic FAST-LIO CPU
+    # starvation signature ("No Effective Points!" in fast_lio.log, then
+    # dead-reckoning IMU divergence). survivor_detector runs NCNN inference at
+    # 5 Hz, map_2d_slicer numpy-slices a 100k-point cloud at 2 Hz, and neither
+    # were being kept off FAST-LIO's cores. Cores 8..11 are otherwise idle in
+    # this 12-core layout, so send the mission-layer python and the rosbag
+    # recorder over there.
+    pin_all_threads "exploration_node" "8,9"
+    pin_all_threads "traj_server" "8,9"
+    pin_all_threads "survivor_detector.py" "10,11"
+    pin_all_threads "map_2d_slicer.py" "10,11"
+    pin_all_threads "grid_visualizer.py" "10,11"
+    pin_all_threads "coverage_reporter.py" "10,11"
+    pin_all_threads "entry_detection_module.py" "6,7"
+    pin_all_threads "rosbag.*record" "10,11"
+
     sleep 3
 done

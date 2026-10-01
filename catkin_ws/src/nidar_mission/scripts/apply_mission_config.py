@@ -507,19 +507,27 @@ def main():
         # actor-based generator; new configs use mesh_uri.
         mesh_uri = survivors_cfg.get('mesh_uri',
                                      survivors_cfg.get('skin_uri',
-                                     'file:///usr/share/gazebo-11/media/models/stand.dae'))
-        # stand.dae's mesh origin is at the pelvis (measured Z range -0.859..+0.857),
+                                     'file:///usr/share/gazebo-11/media/models/sitting.dae'))
+        # sitting.dae's mesh origin is at the pelvis (measured Z range -0.859..+0.857),
         # not at the feet, so a pose z=0 sinks the character half a metre. mesh_z_offset
-        # lifts the visual so feet touch the ground. 0.86 is measured, not nominal.
-        mesh_z_offset = float(survivors_cfg.get('mesh_z_offset', 0.86))
-        coll_half = float(survivors_cfg.get('collision_half_extent', 0.20))
-        coll_height = float(survivors_cfg.get('collision_height', 1.75))
+        # lifts the visual so feet touch the ground. Default 0.52 assumes a Z scale of 0.6
+        # (see mesh_scale below); recompute if you change either.
+        mesh_z_offset = float(survivors_cfg.get('mesh_z_offset', 0.52))
+        # Visual scale (x, y, z). Z<1 compresses the figure vertically to simulate
+        # a sitting posture without needing an SDF <actor> and skeletal animation.
+        scale = survivors_cfg.get('mesh_scale', [1.0, 1.0, 0.6])
+        if isinstance(scale, (int, float)):
+            scale = [float(scale), float(scale), float(scale)]
+        mesh_scale = '%g %g %g' % (float(scale[0]), float(scale[1]), float(scale[2]))
+        coll_half = float(survivors_cfg.get('collision_half_extent', 0.15))
+        coll_height = float(survivors_cfg.get('collision_height', 0.50))
         placements = survivors_cfg.get('placements', []) or []
         survivors_block = '\n'.join(
             SURVIVOR_BLOCK.format(name=s['name'],
                                   x=s['x'], y=s['y'], yaw=s.get('yaw', 0.0),
                                   mesh_uri=mesh_uri,
                                   mesh_z_offset=mesh_z_offset,
+                                  mesh_scale=mesh_scale,
                                   coll_diameter=coll_half * 2.0,
                                   coll_height=coll_height,
                                   half_height=coll_height / 2.0)
@@ -590,7 +598,7 @@ SURVIVOR_BLOCK = """    <model name="{name}">
           <geometry>
             <mesh>
               <uri>{mesh_uri}</uri>
-              <scale>1 1 1</scale>
+              <scale>{mesh_scale}</scale>
             </mesh>
           </geometry>
         </visual>

@@ -33,6 +33,12 @@ RVIZ_ARG=${RVIZ:-0}
 if [ "$RVIZ_ARG" = "1" ] || [ "$RVIZ_ARG" = "true" ]; then RVIZ_ARG=true; else RVIZ_ARG=false; fi
 echo "Starting clean FUEL exploration test (GUI=${GUI_ARG}, vehicle=${VEHICLE}) at position (X=${SPAWN_X}, Y=${SPAWN_Y}, Z=${SPAWN_Z}, Yaw=${SPAWN_YAW})..."
 
+# Render on the NVIDIA GPU. The X server behind DISPLAY is not NVIDIA-driven, so plain GLX falls
+# back to Mesa llvmpipe (software, burns CPU). PRIME render offload routes GL to the RTX GPU.
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __VK_LAYER_NV_optimus=NVIDIA_only
+export LIBGL_ALWAYS_SOFTWARE=0
 # Ensure clean slate
 # Refuse to fly a tree whose fixes are not actually in the binaries. On 2026-09-09
 # entry_detection_module.py and fast_exploration_fsm.cpp were reverted twice (09:29:36 and
@@ -255,6 +261,52 @@ roslaunch nidar_mission nidar_mission.launch entry_enabled:=$ENTRY_ARG > /tmp/mi
 MISSION_PID=$!
 sim_sleep 3
 
+# Stream [SURVIVOR] and [Coverage] lines from the mission log to this shell's
+# stdout. rospy.loginfo writes to /rosout only; ROS captures it into the node's
+# log file but nothing prints it to the operator's terminal. Without this tail
+# the only per-detection feedback the operator sees during a run is silence,
+# which was the user's complaint after run 20260911_151851 -- five survivors
+# had been detected and logged, but every one of them landed in the ROS log
+# only and none in the terminal the operator was watching.
+#
+# Single awk process instead of `tail | grep | sed`: multi-process pipelines
+# with backgrounded stages accrete buffering points that in practice never
+# flush inside test_takeoff.sh (verified 2026-09-11 -- the previous
+# tail|grep|sed variant produced zero output on stdout during the run, then
+# the identical pipeline ran fine standalone against the same file after the
+# run ended). One awk with fflush() after every print is deterministic.
+awk '
+  /\[SURVIVOR\]|\[Coverage\]|\[EDM\] State Transition|\[EDM\] DESCEND|\[EDM\] LAND|\[EDM\] RETURN/ {
+    print "[mission] " $0
+    fflush()
+  }
+' < <(tail -n0 -F /tmp/mission.log 2>/dev/null) &
+MISSION_TAIL_PID=$!
+
+# Auto-record the Phase 5 visualization topics into a rosbag so the 2D map,
+# grid overlay and survivor tags can be replayed after the run. See
+# scripts/view_map2d.sh --bag for the replay side.
+# --lz4 halves the on-disk size; --split limits any single .bag file to 200 MB
+# so a run that goes long doesn't produce one huge file that stalls rviz on
+# open. The bag lands next to the ulog/summary bundle at run-end.
+#
+# NO /tf: run 20260911_153922 recorded 6204 /tf messages in 5 minutes; that is
+# a continuous disk I/O storm that starves FAST-LIO's own writes and adds
+# nothing to visualisation -- RViz reconstructs the world<->map chain from
+# /tf_static alone (the dynamic /tf carries only camera_init -> base_link,
+# which is the odometry we do not need for replay of the 2D floorplan). Dropping
+# it takes the bag size from ~14 MB uncompressed to ~1 MB, and the recorder's
+# CPU cost from measurable to negligible. view_map2d.sh --bag now publishes
+# world_to_map itself at replay time so no chain is missing.
+mkdir -p logs/bags 2>/dev/null || true
+BAG_BASENAME="logs/bags/map2d_$(date +%Y%m%d_%H%M%S)"
+rosbag record --lz4 --split --size=200 \
+    -O "${BAG_BASENAME}" \
+    /map_2d /grid_markers /survivor_tags /survivors /tf_static \
+    > /tmp/rosbag_record.log 2>&1 &
+BAG_PID=$!
+echo "Recording visualization topics -> ${BAG_BASENAME}.bag (PID=${BAG_PID})"
+
 echo "Setting MAVROS Mode to AUTO.TAKEOFF for Arming..."
 rosrun mavros mavsys mode -c AUTO.TAKEOFF
 sim_sleep 1
@@ -343,6 +395,30 @@ if [ -n "${FLIGHTLOG_PID:-}" ]; then
   kill -INT "$FLIGHTLOG_PID" 2>/dev/null || true
   wait "$FLIGHTLOG_PID" 2>/dev/null || true
   python3 /home/developer/NIDAR/tools/flightlog/pack.py --fuel-log /tmp/fuel.log || true
+fi
+
+# Stop the mission-log tail cleanly (it would otherwise linger under the next
+# run and double-print lines).
+if [ -n "${MISSION_TAIL_PID:-}" ]; then
+  kill "${MISSION_TAIL_PID}" 2>/dev/null || true
+fi
+
+# rosbag needs SIGINT to finish writing the trailing index cleanly. A SIGTERM
+# leaves the file un-indexed and rviz refuses to open it. Wait a couple of
+# seconds after SIGINT for rosbag to flush.
+if [ -n "${BAG_PID:-}" ]; then
+  kill -INT "${BAG_PID}" 2>/dev/null || true
+  # Wait up to 5 s for rosbag to write the index and exit
+  for _ in 1 2 3 4 5; do
+    kill -0 "${BAG_PID}" 2>/dev/null || break
+    sim_sleep 1
+  done
+  # Move the bag into the run bundle if we know where it went
+  if compgen -G "${BAG_BASENAME}"*.bag > /dev/null 2>&1; then
+    echo "Visualization bag(s):"
+    ls -la ${BAG_BASENAME}*.bag 2>/dev/null | sed 's/^/  /'
+    echo "Replay with: scripts/view_map2d.sh --bag ${BAG_BASENAME}.bag"
+  fi
 fi
 
 echo "Simulation test execution complete."

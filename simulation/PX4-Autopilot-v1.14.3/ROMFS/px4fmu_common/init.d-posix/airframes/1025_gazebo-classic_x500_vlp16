@@ -122,8 +122,16 @@ param set-default EKF2_EV_DELAY 0
 # out-of-band rangefinder samples (mapping/tfmini_range_min/max) rather than forwarding the ray
 # sensor's 35 m no-return sentinel as a real altitude. See Sec 20.3/20.4.
 param set-default EKF2_EV_CTRL 11
-param set-default EKF2_HGT_REF 2
-param set-default EKF2_RNG_CTRL 1
+# 2026-10-01: height reference moved from raw Range (2) to Vision (3), and PX4's own range height
+# fusion disabled (RNG_CTRL 0). The vision channel is FAST-LIO's published Z, which is still the
+# TFmini reading -- but obstacle-gated in laserMapping.cpp rangeCb, which PX4's raw path cannot be.
+# With raw range as reference, every pass over a survivor read the survivor's top as the floor;
+# RNG_CTRL=1 (conditional) folded each error into its bias estimator, so EKF2 ratcheted ~0.5 m
+# low and the vehicle cruised at 2.2 m instead of 1.5 (run 20261001_161018: FUEL's start left the
+# map box, coverage stalled at 52%, LiDAR rose to wall-top height and FAST-LIO diverged).
+# The guard's range_timeout watchdog still covers a silent TFmini; BARO_CTRL=1 covers an EV gap.
+param set-default EKF2_HGT_REF 3
+param set-default EKF2_RNG_CTRL 0
 param set-default EKF2_MIN_RNG 0.1
 # Where the TFmini actually sits, in body metres below the vehicle origin (EKF2_RNG_POS_Z; the
 # param is _Z, NOT _D: PX4 v1.14 defines only EKF2_RNG_POS_X/Y/Z, so a "_D" spelling is silently

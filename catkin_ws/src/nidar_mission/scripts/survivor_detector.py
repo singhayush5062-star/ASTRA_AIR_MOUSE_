@@ -372,13 +372,23 @@ class SurvivorDetector(object):
                                d_cam_optical[0],
                                d_cam_optical[1]])
 
+        # Transform to WORLD frame, not `map`. The static world_to_map_tf
+        # (see launch/nidar_fuel_upstream.launch) publishes world -> map with
+        # a 90 deg yaw and translation to the launch pad, so `map` in this
+        # stack is the camera_init odometry frame -- its coordinates are NOT
+        # world coordinates and cannot be fed to the arena-grid math directly.
+        # The failure mode (documented in
+        # PLANNING_DOCS/survivor_detector_frame_bug_2026-09-11.md): reported
+        # positions in run 20260911_103244 spanned x=[7.15..17.86] m, entirely
+        # outside the -7.5..7.5 arena, because we were emitting map-frame
+        # values as if they were world.
         try:
-            p0 = self._tf_point(0.0, 0.0, 0.0, src_frame, 'map', stamp)
+            p0 = self._tf_point(0.0, 0.0, 0.0, src_frame, 'world', stamp)
             p1 = self._tf_point(d_cam_body[0], d_cam_body[1], d_cam_body[2],
-                                src_frame, 'map', stamp)
+                                src_frame, 'world', stamp)
         except Exception as e:
             rospy.logwarn_throttle(5.0,
-                                   '[detector] tf %s->map failed: %s', src_frame, e)
+                                   '[detector] tf %s->world failed: %s', src_frame, e)
             return None
 
         origin = np.array([p0.point.x, p0.point.y, p0.point.z])
@@ -499,13 +509,16 @@ class SurvivorDetector(object):
     def _publish_state(self):
         msg = SurvivorArray()
         msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = 'map'
+        # 'world' matches the frame the positions are now expressed in (see
+        # _backproject_ground). Anything downstream that draws these on the
+        # /map_2d OccupancyGrid needs to know the frame is world, not map.
+        msg.header.frame_id = 'world'
         for t in self.tracks:
             if not t.published:
                 continue
             s = Survivor()
             s.header.stamp = rospy.Time.from_sec(t.first_seen)
-            s.header.frame_id = 'map'
+            s.header.frame_id = 'world'
             s.id = int(t.id)
             gx, gy = self.grid.cell(t.position[0], t.position[1])
             s.grid_x = int(gx)
@@ -527,7 +540,7 @@ class SurvivorDetector(object):
             if not t.published:
                 continue
             m = Marker()
-            m.header.frame_id = 'map'
+            m.header.frame_id = 'world'
             m.header.stamp = rospy.Time.now()
             m.ns = 'survivors'
             m.id = int(t.id)

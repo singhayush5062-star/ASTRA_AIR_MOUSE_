@@ -32,19 +32,19 @@
       <pose>-4.0 -4.0 0 0 0 1.5708</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>
@@ -55,19 +55,19 @@
       <pose>-6.0 -2.0 0 0 0 0.0</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>
@@ -78,19 +78,19 @@
       <pose>4.0 -4.0 0 0 0 3.1416</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>
@@ -101,19 +101,19 @@
       <pose>6.0 -2.0 0 0 0 0.7854</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>
@@ -124,19 +124,19 @@
       <pose>-4.0 6.0 0 0 0 -1.5708</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>
@@ -147,19 +147,19 @@
       <pose>4.0 4.0 0 0 0 2.3562</pose>
       <link name="body">
         <visual name="visual">
-          <pose>0 0 0.86 0 0 0</pose>
+          <pose>0 0 0.52 0 0 0</pose>
           <geometry>
             <mesh>
-              <uri>file:///usr/share/gazebo-11/media/models/stand.dae</uri>
-              <scale>1 1 1</scale>
+              <uri>file:///usr/share/gazebo-11/media/models/sitting.dae</uri>
+              <scale>1 1 0.6</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
-          <pose>0 0 0.875 0 0 0</pose>
+          <pose>0 0 0.25 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.4 0.4 1.75</size>
+              <size>0.3 0.3 0.5</size>
             </box>
           </geometry>
         </collision>

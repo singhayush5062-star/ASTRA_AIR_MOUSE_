@@ -175,6 +175,18 @@ double g_range_timeout = 1.0;
 double g_range_min = 0.10;
 double g_range_max = 12.0;
 
+// Obstacle gate for the rangefinder (see rangeCb). A reading this much SHORTER than the current
+// floor-referenced height is an object under the vehicle, not a descent. 0.20 m is above the
+// TFmini's sample-to-sample noise and attitude-tilt effects at cruise, and below the smallest
+// object we must ignore (a 0.5 m seated survivor). <= 0 disables the gate.
+double g_range_obstacle_step  = 0.20;
+// Longest an obstacle rejection may last before the short reading is accepted as a real floor
+// change (e.g. SLAM vertical drift while the datum is held), seconds.
+double g_range_obstacle_max_s = 10.0;
+bool   g_range_rejecting      = false;
+double g_range_reject_start   = 0.0;
+double g_range_hold_height    = 0.0;
+
 // THE TWO CONSTANTS BELOW DEFINE THE ALTITUDE DATUM FOR THE WHOLE STACK. Get either wrong and
 // every consumer of /Fast_LIO/odometry silently flies to the wrong height. Both are params, and
 // both are generated from mission_config.yaml -- do not hardcode either again.
@@ -263,9 +275,59 @@ void rangeCb(const sensor_msgs::Range::ConstPtr& msg)
     // offset, then to camera_init with the same rigid transform flight_envelope_guard.py uses
     // (zw = zc + spawn_world_z), inverted:
     //     zc = zw - spawn_world_z = (range + mount_offset) - camera_init_world_z
-    g_pinned_height_camera_init =
-        msg->range + g_tfmini_mount_offset - g_camera_init_world_z;
-    g_last_range_time = ros::Time::now().toSec();
+    const double h_new = msg->range + g_tfmini_mount_offset - g_camera_init_world_z;
+    const double now = ros::Time::now().toSec();
+
+    // Obstacle gate. The beam measures to whatever is under the vehicle, and the floor is the
+    // LOWEST surface in the arena, so an object (survivor, debris, furniture) can only make the
+    // reading SHORTER. A sudden shortening is therefore an obstacle, not a descent: accept it and
+    // the altitude datum jumps up by the object's height, and the whole stack climbs to "get back"
+    // to cruise. Run 20261001_161018: each pass over a 0.5 m survivor read 1.21-1.36 m instead of
+    // ~1.65, EKF2 ratcheted 0.5 m high and never recovered, the vehicle cruised at 2.2 m, its
+    // start point left FUEL's map box and coverage stalled at 52%.
+    //
+    // While rejecting, hold the last floor-referenced height CONSTANT. Do not carry it forward with
+    // the SLAM state's vertical motion: Z is FAST-LIO's least-constrained axis here (LIODIAG weak
+    // direction (0,0,1), cond > 200 near walls), and with the range pin released the state and the
+    // pin would chase each other with no anchor -- measured 0.24 m of drift inside one 1 s hold.
+    // Flight is fixed-altitude, so the vehicle's true height barely moves during an obstacle
+    // pass. Longer readings are always
+    // accepted (they are the floor reappearing). A rejection that persists past
+    // g_range_obstacle_max_s is assumed to be a genuine floor change and re-anchors.
+    if (g_range_valid && g_range_obstacle_step > 0.0)
+    {
+        const double ref = g_range_rejecting ? g_range_hold_height : g_pinned_height_camera_init;
+        if (h_new < ref - g_range_obstacle_step)
+        {
+            if (!g_range_rejecting)
+            {
+                g_range_rejecting = true;
+                g_range_reject_start = now;
+                g_range_hold_height = g_pinned_height_camera_init;
+                ROS_WARN("[FAST-LIO] range %.2f m is %.2f m shorter than the floor height %.2f; "
+                         "treating as an obstacle under the vehicle, holding altitude datum",
+                         msg->range, ref - h_new, ref);
+            }
+            if (now - g_range_reject_start < g_range_obstacle_max_s)
+            {
+                g_pinned_height_camera_init = g_range_hold_height;
+                g_last_range_time = now;
+                return;
+            }
+            ROS_ERROR("[FAST-LIO] range has read short for %.1f s; accepting it as a genuine "
+                      "floor change and re-anchoring the altitude datum",
+                      now - g_range_reject_start);
+        }
+        else if (g_range_rejecting)
+        {
+            ROS_WARN("[FAST-LIO] floor visible again after %.1f s (range %.2f m); resuming "
+                     "rangefinder altitude", now - g_range_reject_start, msg->range);
+        }
+        g_range_rejecting = false;
+    }
+
+    g_pinned_height_camera_init = h_new;
+    g_last_range_time = now;
     g_range_valid = true;
 }
 
@@ -1014,6 +1076,8 @@ int main(int argc, char** argv)
     nh.param<double>("mapping/tfmini_range_timeout", g_range_timeout, 1.0);
     nh.param<double>("mapping/tfmini_range_min", g_range_min, 0.10);
     nh.param<double>("mapping/tfmini_range_max", g_range_max, 12.0);
+    nh.param<double>("mapping/tfmini_obstacle_step", g_range_obstacle_step, 0.20);
+    nh.param<double>("mapping/tfmini_obstacle_max_s", g_range_obstacle_max_s, 10.0);
 
     p_pre->lidar_type = lidar_type;
     cout<<"p_pre->lidar_type "<<p_pre->lidar_type<<endl;

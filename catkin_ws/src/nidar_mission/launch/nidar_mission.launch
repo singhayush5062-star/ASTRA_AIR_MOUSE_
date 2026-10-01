@@ -65,12 +65,11 @@
         output="screen">
     <param name="enabled" value="true"/>
     <!-- Repo-relative path; the node resolves it against the repo root itself.
-         NCNN (a directory, not a file) instead of best.pt so CPU inference does
-         not fight Gazebo for the GPU. See mission_config.yaml for the rationale. -->
-    <param name="model_path" value="models/detection/PERSON_DETECTION_MODEL_V3/best_ncnn_model"/>
+         PyTorch best.pt with device=auto (CUDA when available) so inference runs on the GPU. -->
+    <param name="model_path" value="models/detection/PERSON_DETECTION_MODEL_V3/best.pt"/>
     <param name="detect_hz" value="5.0"/>
     <param name="confidence_threshold" value="0.55"/>
-    <param name="device" value="cpu"/>
+    <param name="device" value="auto"/>
     <param name="association_radius" value="0.75"/>
     <param name="confirmation_threshold" value="3"/>
     <param name="stale_timeout_s" value="10.0"/>
@@ -98,7 +97,15 @@
   <node if="$(arg map_2d_enabled)"
         pkg="nidar_mission" type="map_2d_slicer.py" name="map_2d_slicer"
         output="screen">
-    <param name="publish_rate" value="2.0"/>
+    <!-- 1 Hz not 2 Hz: /sdf_map/occupancy_all itself publishes at
+         map_ros/coverage_interval = 2.0 s = 0.5 Hz (see algorithm.xml), so any
+         slicer rate above 0.5 Hz just re-serialises the same cached grid to
+         ROS with no new information. 1 Hz is a compromise between "fresh
+         enough for the operator" and "not competing with FAST-LIO for CPU"
+         (2 Hz alongside NCNN inference cost measurable planner starvation
+         until Phase 5 nodes were pinned onto cores 10,11 by
+         cpu_repin_loop.sh 2026-09-11). -->
+    <param name="publish_rate" value="1.0"/>
     <param name="z_slice_min" value="0.3"/>
     <param name="z_slice_max" value="1.9"/>
     <param name="cloud_topic" value="/sdf_map/occupancy_all"/>
@@ -111,6 +118,6 @@
   <node if="$(arg grid_visualizer_enabled)"
         pkg="nidar_mission" type="grid_visualizer.py" name="grid_visualizer"
         output="screen">
-    <param name="frame_id" value="map"/>
+    <param name="frame_id" value="world"/>
   </node>
 </launch>

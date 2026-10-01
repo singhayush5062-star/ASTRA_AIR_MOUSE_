@@ -44,7 +44,12 @@ class GridVisualizer(object):
     def __init__(self):
         rospy.init_node('grid_visualizer', anonymous=False)
 
-        self.frame = rospy.get_param('~frame_id', 'map')
+        # Frame the markers are published in. WORLD, not map: the grid
+        # origin_x/origin_y are world coordinates (see config/arena_grid.yaml)
+        # and the /survivors positions after the 2026-09-11 frame-bug fix are
+        # in world too. Anything downstream (RViz layout, GCS panel) reads
+        # this in the world frame.
+        self.frame = rospy.get_param('~frame_id', 'world')
         self.origin_x = float(rospy.get_param('/arena_grid/origin_x', -7.0))
         self.origin_y = float(rospy.get_param('/arena_grid/origin_y', -7.0))
         self.cell = float(rospy.get_param('/arena_grid/cell_size', 2.0))

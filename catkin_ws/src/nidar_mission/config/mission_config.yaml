@@ -307,16 +307,22 @@ nidar:
     # originally set to stop this trigger from doing the same thing sooner.
     #
     # LOWERED 97 -> 95 on 2026-09-11 because the arina_nidar arena's interior geometry
-    # regularly asymptotes at 96-97% observable coverage (survivors block a couple of cells
-    # each, and viewpoint sampling cannot see behind them). Run 20260911_101520 plateaued at
-    # 96.71% at t=235 s, then hovered/replanned for the next 290 s until PX4 fired its own
-    # "Failsafe: blind land" at t=527 -- no controlled RETURN, no controlled LAND, no
-    # touchdown on the pad. The floor was the direct cause: the plateau detector saw the
-    # coverage was flat but refused to trip because it was below 97. 95 lets the plateau
-    # fire on this arena; the frontier-retirement guard (which is what 97 was really
-    # protecting against) still sees `frontier count > 0` on run 20260908_160711's failure
-    # mode, so lowering the floor does not re-open that specific hazard.
-    min_coverage_pct: 95.0
+    # regularly asymptotes at 96-97% observable coverage.
+    #
+    # LOWERED 95 -> 85 on 2026-09-11 (later): run 20260911_151851 plateaued at 91.1% and
+    # never fired RETURN, so PX4 blind-landed mid-arena at t=438. The competition's primary
+    # scored requirement (§4) is "autonomous exit via designated exit point" -- a mission
+    # that never returns scores near zero on that entire section regardless of how much
+    # coverage it earned. Trading 4-10 percentage points of coverage for a controlled
+    # return-and-land at the pad is unambiguously better than trading the return for a few
+    # more percent of coverage.
+    #
+    # The frontier-retirement guard that 97 was really protecting against
+    # (run 20260908_160711) still needs `frontier count > 0` at trigger time, so lowering
+    # the floor to 85 does not re-open that hazard -- it just permits the plateau detector
+    # to fire earlier on runs where LiDAR degeneracy or planner deadlock has pinned
+    # coverage below 95%.
+    min_coverage_pct: 85.0
     # Observe-only. The trigger is evaluated and logged every cycle but does not act until this
     # is true. Arm it only after >= 3 runs confirm 'would_trigger' first goes true above 98 %
     # coverage and 50-150 s before the run actually ended.
@@ -649,7 +655,7 @@ nidar:
     # -- FAST-LIO starves at load average 12+). NCNN is CPU-only, benchmarked
     # at 28 ms/frame on this laptop (35 FPS), well above the 5 Hz target, and
     # is the same format we'll run on Jetson at competition time.
-    model: models/detection/PERSON_DETECTION_MODEL_V3/best_ncnn_model
+    model: models/detection/PERSON_DETECTION_MODEL_V3/best.pt
     # Detector runs at DETECT_HZ, not camera rate: the doc's Phase 4 §4.2
     # spec is "5 Hz, not camera rate", CPU headroom is worth more than
     # 30 Hz on a stationary body.
@@ -658,9 +664,9 @@ nidar:
     # Model reports P 0.961 at its own threshold; 0.55 keeps us comfortably
     # above the noise floor without demanding a full-body view.
     confidence_threshold: 0.55
-    # NCNN runs on CPU by design (no CUDA). survivor_detector.py refuses
-    # 'auto' with the NCNN model and forces 'cpu' regardless.
-    device: cpu
+    # best.pt + 'auto' -> CUDA when available (the dev container exposes the RTX GPU).
+    # NCNN (best_ncnn_model) would force 'cpu'.
+    device: auto
     input_topic: /camera/image_raw
     camera_info_topic: /camera/camera_info
     # Latched publisher a late-joining GCS reads to catch the full set.
@@ -712,27 +718,57 @@ nidar:
     grid_origin_x: -7.0
     grid_origin_y: -7.0
     grid_size: 2.0
-    # Gazebo 11 ships stand.dae at /usr/share/gazebo-11/media/models so no
+    # Gazebo 11 ships sitting.dae at /usr/share/gazebo-11/media/models so no
     # external download is needed at competition time (§7 no-network). The
     # generator emits static <model>...<visual><mesh> blocks rather than SDF
     # <actor> elements: actor requires a skeleton-bearing <animation> block
     # or it silently renders as invisible, which is the "only 1 human dummy
     # visible" bug that ended run 20260911_094635 with zero survivor
     # detections. A model with a mesh visual is unconditional.
-    mesh_uri: file:///usr/share/gazebo-11/media/models/stand.dae
-    # Vertical offset of the mesh's own origin above the pose z=0. stand.dae's
-    # vertex range measured 2026-09-11 is Z: -0.859 to +0.857 with the origin
-    # at the pelvis, so placing the model at pose z=0 sinks feet 0.86 m into
-    # the ground and the character looks half-buried -- the "dummy models
-    # height are very low" bug reported this session. Setting the visual pose
-    # to +0.86 puts the feet on the ground and the head at 1.72 m.
-    mesh_z_offset: 0.86
+    #
+    # SITTING: the user asked for sitting-posture survivors. All three
+    # candidate meshes (stand.dae, sitting.dae, sit_down.dae) ship as
+    # skeletal .dae files whose *bind-pose* vertex data is identical (Z: -0.859
+    # .. +0.857, T-pose arms out) -- so simply changing the URI does not
+    # change how they render as a static <visual>. To get a "sitting" look
+    # without loading the skeleton, we ALSO compress the mesh vertically with
+    # mesh_scale, which makes the figure ~60% of full standing height (about
+    # 1.03 m tall). Sitting.dae is chosen as the URI anyway so a future
+    # <actor> migration can point at the same file and see the animation.
+    mesh_uri: file:///usr/share/gazebo-11/media/models/sitting.dae
+    # Visual scale (x y z). Z=0.6 gives ~1.03 m rendered height, tall enough
+    # to remain detectable by the person detector but short enough that the
+    # drone at 1.5 m cruise altitude flies safely OVER any survivor rather
+    # than into its head.
+    mesh_scale: [1.0, 1.0, 0.6]
+    # Vertical offset of the mesh's own origin above the pose z=0. sitting.dae's
+    # bind-pose vertex Z range is -0.859 to +0.857 with the origin at the
+    # pelvis; scaling Z by 0.6 shrinks that to -0.515 .. +0.514, so a lift of
+    # 0.52 m puts the visual feet on the ground.
+    mesh_z_offset: 0.52
     # Half-extents of the box collision that stands in for the mannequin body.
-    # 0.20 m radius keeps the drone's 0.27 m prop clearance safe on a fly-by
-    # (18 cm inflation margin) but tight enough that the mannequin doesn't
-    # look ridiculous next to the visual mesh.
-    collision_half_extent: 0.20
-    collision_height: 1.75
+    #
+    # SHRUNK FROM (0.20, 1.75) on 2026-09-11 after run 20260911_135927
+    # blocked FUEL's planner for 342 s (t=198..540) at survivor_6 (4, 4) and
+    # survivor_3 (4, -4). At the old 0.20 m half-extent + 0.40 m planner
+    # inflation the no-fly ring around each survivor was 0.60 m, and SDFMap
+    # rounds inflation UP to the nearest cell (0.50 m at 0.10 m resolution)
+    # so the effective ring was 0.70 m -- almost the entire 1.0 m room
+    # clearance. The planner could reach the room but could not sample a
+    # viewpoint that saw the survivor without also being inside the ring.
+    # A 1.75 m collision height also meant the drone at 1.5 m cruise
+    # physically could not fly OVER the mannequin either.
+    #
+    # New numbers: 0.15 m half-extent x 0.50 m height. 0.15 keeps the
+    # planner's ring at 0.65 m (still inflated to 0.70 m by cell rounding),
+    # so this alone is NOT the fix -- the 0.50 m HEIGHT is, because that
+    # sits entirely below the 1.45 m guard floor and 1.5 m cruise altitude,
+    # and SDFMap's slab (planner.box_z_halfspan) does not include voxels
+    # below cruise-0.15 m. So the collision only exists in air the drone
+    # never flies in. Result: no runtime planner impact, but a physical
+    # collision remains for anyone doing sim-verification manually.
+    collision_half_extent: 0.15
+    collision_height: 0.50
     # Positions: 2 m grid-cell CENTRES only (even integers on the 2m/-7 origin
     # grid), placed INSIDE ROOMS (>=1.0 m free clearance around the survivor)
     # rather than in corridors. Verified 2026-09-11 by slicing arina_nidar.stl

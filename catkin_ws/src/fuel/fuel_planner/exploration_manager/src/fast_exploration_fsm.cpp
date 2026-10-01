@@ -266,6 +266,26 @@ void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
       // failures in place. Measured before this clamp: 90 of 119 replans failed, 60 of those
       // with a start speed over the search's 0.85 m/s ceiling, against 0 of 44 successes.
       fd_->start_vel_ = clampStartVel(fd_->start_vel_);
+      // Start HEIGHT guard. The map box is only 0.50 m tall, and a start point outside it makes
+      // KinodynamicAstar fail on its very first node ("open set empty, use node num: 1"). Run
+      // 20261001_161018: a height-estimate error (rangefinder reading survivor tops as floor)
+      // put odometry z at 1.78-1.87 against box_max_z 1.59, and 18771 of the run's replans
+      // failed that way while coverage stalled at 52% for 290 s. Planning at a clamped height
+      // is always better than not planning at all: traj_server flies its own z_cruise anyway.
+      {
+        Eigen::Vector3d bmin, bmax;
+        planner_manager_->edt_environment_->sdf_map_->getBox(bmin, bmax);
+        const double margin = 0.05;
+        const double z_lo = bmin.z() + margin, z_hi = bmax.z() - margin;
+        if (std::isfinite(fd_->start_pt_.z()) && z_lo < z_hi &&
+            (fd_->start_pt_.z() < z_lo || fd_->start_pt_.z() > z_hi)) {
+          ROS_WARN_THROTTLE(2.0,
+                            "[FSM] start z %.2f outside map box [%.2f, %.2f]; clamping so the "
+                            "kinodynamic search can expand.",
+                            fd_->start_pt_.z(), bmin.z(), bmax.z());
+          fd_->start_pt_.z() = std::min(std::max(fd_->start_pt_.z(), z_lo), z_hi);
+        }
+      }
       // Vertical guard, same single-point placement and for the same reason: the box is only
       // 0.50 m tall, so a vertical rate the magnitude clamp happily passes can still prune
       // every motion primitive. See clampStartVelZ.

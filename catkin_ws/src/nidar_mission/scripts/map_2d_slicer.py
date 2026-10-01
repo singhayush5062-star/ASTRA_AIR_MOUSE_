@@ -90,6 +90,25 @@ class Map2DSlicer(object):
                                    ('f', np.float32)])
         self._cloud_topic = rospy.get_param('~cloud_topic', '/sdf_map/occupancy_all')
 
+        # Static camera_init/map -> world conversion.
+        # nidar_fuel_upstream.launch publishes:
+        #     world -> map            (yaw=+pi/2, translation = pad center)
+        #     map -> camera_init      (identity)
+        # so a point in camera_init/map at (x_m, y_m, z_m) is at world
+        #     world_x = -y_m + pad_x
+        #     world_y =  x_m + pad_y
+        #     world_z =  z_m + pad_z    (pad_z = pad.thickness + belly_clearance)
+        # We hard-code the inverse here (rather than calling tf2 per cloud)
+        # because it is static -- pulling it into a message-callback path costs
+        # ~1 ms per cloud and adds a failure mode (tf2 not ready in the first
+        # 100 ms after startup) with no benefit.
+        pad = rospy.get_param('/nidar/launch_pad/center', {'x': 0.0, 'y': -9.5})
+        pad_thickness = float(rospy.get_param('/nidar/launch_pad/thickness', 0.03))
+        belly = float(rospy.get_param('/nidar/vehicle/belly_clearance', 0.23))
+        self._pad_x = float(pad.get('x', 0.0))
+        self._pad_y = float(pad.get('y', -9.5))
+        self._pad_z = pad_thickness + belly
+
         # Latest map data -- built by _cloud_cb, published by _tick.
         self._latest_grid = None
         self._latest_stamp = None
@@ -117,10 +136,19 @@ class Map2DSlicer(object):
         # 16-byte point step. Reinterpret the whole buffer as our dtype.
         n = msg.width * msg.height
         raw = np.frombuffer(msg.data, dtype=self._point_dt, count=n)
-        xs = raw['x'].astype(np.float32)
-        ys = raw['y'].astype(np.float32)
-        zs = raw['z'].astype(np.float32)
+        xs_m = raw['x'].astype(np.float32)
+        ys_m = raw['y'].astype(np.float32)
+        zs_m = raw['z'].astype(np.float32)
         fs = raw['f'].astype(np.int32)
+
+        # Convert camera_init/map -> world before any bounds check. The
+        # bounds (self.x_min/max, self.y_min/max, self.z_min/max) are all in
+        # WORLD frame -- see mission_config.yaml. Skipping this conversion
+        # was the "OccupancyGrid was silently empty" bug (points survived
+        # the read but every one was outside the world-frame arena box).
+        xs = (-ys_m + self._pad_x).astype(np.float32)
+        ys = (xs_m + self._pad_y).astype(np.float32)
+        zs = (zs_m + self._pad_z).astype(np.float32)
 
         # Only points inside the slab AND inside the arena affect the grid.
         in_slab = (zs >= self.z_min) & (zs <= self.z_max)
@@ -173,7 +201,11 @@ class Map2DSlicer(object):
         meta.origin = origin
 
         msg = OccupancyGrid()
-        msg.header = Header(stamp=rospy.Time.now(), frame_id='map')
+        # Published in the world frame -- origin_x/y (from arena.bounds) are
+        # world coordinates, and points were converted from camera_init/map
+        # to world by _cloud_cb. RViz's default fixed_frame=world renders
+        # this without further transforms.
+        msg.header = Header(stamp=rospy.Time.now(), frame_id='world')
         msg.info = meta
         msg.data = self._latest_grid.tolist()
 
