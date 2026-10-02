@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_map2d</name>
+  <version>0.1.0</version>
+  <description>
+    Live 2D map and survivor tagging for NIDAR (Phase 5): map_2d_slicer.py slices FUEL's
+    occupancy into a nav_msgs/OccupancyGrid on /map_2d, grid_visualizer.py publishes the
+    A1..G7 grid overlay and the per-survivor cell tags. view_map2d.sh opens the RViz
+    layout live or against a recorded bag.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>rviz</exec_depend>
+  <exec_depend>nidar_msgs</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+</package>

@@ -1,0 +1,6 @@
+nidar_map2d
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_map2d/lib/nidar_map2d/grid_visualizer.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_map2d/grid_visualizer.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_map2d/lib/nidar_map2d/map_2d_slicer.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_map2d/map_2d_slicer.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_map2d/lib/pkgconfig/nidar_map2d.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_map2d.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_map2d/share/nidar_map2d/cmake/nidar_map2dConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_map2d/cmake/nidar_map2dConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_map2d/share/nidar_map2d/cmake/nidar_map2dConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_map2d/cmake/nidar_map2dConfig-version.cmake

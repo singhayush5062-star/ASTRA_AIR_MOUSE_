@@ -5,8 +5,9 @@
        This is what scripts/test_takeoff.sh starts as "the mission layer". It brings up,
        in one roslaunch process:
          nidar_mission     mission FSM (entry, exploration hand-off, return, land),
-                           coverage reporter, 2D map + grid overlay
+                           coverage reporter
          nidar_perception  camera TF chain + survivor detector
+         nidar_map2d       live 2D map, grid overlay, survivor tags
 
        Every argument the pre-split nidar_mission.launch accepted is accepted here with the
        same name and default, and forwarded to the package that now owns it. -->
@@ -24,13 +25,18 @@
     <arg name="grid_config" value="$(arg grid_config)"/>
     <arg name="entry_enabled" value="$(arg entry_enabled)"/>
     <arg name="coverage_report_enabled" value="$(arg coverage_report_enabled)"/>
-    <arg name="map_2d_enabled" value="$(arg map_2d_enabled)"/>
-    <arg name="grid_visualizer_enabled" value="$(arg grid_visualizer_enabled)"/>
   </include>
 
   <include file="$(find nidar_perception)/launch/detector.launch">
     <arg name="config" value="$(arg config)"/>
     <arg name="grid_config" value="$(arg grid_config)"/>
     <arg name="detection_enabled" value="$(arg detection_enabled)"/>
+  </include>
+
+  <include file="$(find nidar_map2d)/launch/map2d.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="grid_config" value="$(arg grid_config)"/>
+    <arg name="map_2d_enabled" value="$(arg map_2d_enabled)"/>
+    <arg name="grid_visualizer_enabled" value="$(arg grid_visualizer_enabled)"/>
   </include>
 </launch>

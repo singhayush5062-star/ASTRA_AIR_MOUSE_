@@ -1,0 +1,47 @@
+<launch>
+  <!-- NIDAR live 2D map (Phase 5): /map_2d occupancy floorplan sliced from FUEL's map,
+       plus the /grid_markers overlay and /survivor_tags. Consumes /sdf_map/occupancy_all
+       and /survivors; owns no motion. Loads the central configuration itself so it also
+       runs standalone (e.g. against a replayed bag). -->
+
+  <arg name="config" default="$(find nidar_config)/config/mission_config.yaml"/>
+  <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
+  <arg name="map_2d_enabled" default="true"/>
+  <arg name="grid_visualizer_enabled" default="true"/>
+
+  <rosparam command="load" file="$(arg config)"/>
+  <rosparam command="load" file="$(arg grid_config)"/>
+
+  <!-- Phase 5 live 2D map. Subscribes to /sdf_map/occupancy_all, slices at
+       cruise altitude, publishes nav_msgs/OccupancyGrid at /map_2d.
+
+       Publish rate 2 Hz is chosen to match the phase plan §5.1 target and
+       to stay under the GCS bandwidth budget (§6.2: <4 Mbps combined). At
+       150x150 cells x 2 Hz that is ~45 kB/s uncompressed. -->
+  <node if="$(arg map_2d_enabled)"
+        pkg="nidar_map2d" type="map_2d_slicer.py" name="map_2d_slicer"
+        output="screen">
+    <!-- 1 Hz not 2 Hz: /sdf_map/occupancy_all itself publishes at
+         map_ros/coverage_interval = 2.0 s = 0.5 Hz (see algorithm.xml), so any
+         slicer rate above 0.5 Hz just re-serialises the same cached grid to
+         ROS with no new information. 1 Hz is a compromise between "fresh
+         enough for the operator" and "not competing with FAST-LIO for CPU"
+         (2 Hz alongside NCNN inference cost measurable planner starvation
+         until Phase 5 nodes were pinned onto cores 10,11 by
+         cpu_repin_loop.sh 2026-09-11). -->
+    <param name="publish_rate" value="1.0"/>
+    <param name="z_slice_min" value="0.3"/>
+    <param name="z_slice_max" value="1.9"/>
+    <param name="cloud_topic" value="/sdf_map/occupancy_all"/>
+  </node>
+
+  <!-- Phase 5 grid overlay and survivor tag publisher. Publishes
+       /grid_markers (2 m grid lines + A1..G7 cell labels) and /survivor_tags
+       (per-confirmed-survivor sphere + text cell tag). Both are latched
+       MarkerArrays so a late-joining GCS gets the full set. -->
+  <node if="$(arg grid_visualizer_enabled)"
+        pkg="nidar_map2d" type="grid_visualizer.py" name="grid_visualizer"
+        output="screen">
+    <param name="frame_id" value="world"/>
+  </node>
+</launch>

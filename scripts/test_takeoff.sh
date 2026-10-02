@@ -291,7 +291,7 @@ MISSION_TAIL_PID=$!
 
 # Auto-record the Phase 5 visualization topics into a rosbag so the 2D map,
 # grid overlay and survivor tags can be replayed after the run. See
-# scripts/view_map2d.sh --bag for the replay side.
+# catkin_ws/src/nidar_map2d/scripts/view_map2d.sh --bag for the replay side.
 # --lz4 halves the on-disk size; --split limits any single .bag file to 200 MB
 # so a run that goes long doesn't produce one huge file that stalls rviz on
 # open. The bag lands next to the ulog/summary bundle at run-end.
@@ -423,7 +423,7 @@ if [ -n "${BAG_PID:-}" ]; then
   if compgen -G "${BAG_BASENAME}"*.bag > /dev/null 2>&1; then
     echo "Visualization bag(s):"
     ls -la ${BAG_BASENAME}*.bag 2>/dev/null | sed 's/^/  /'
-    echo "Replay with: scripts/view_map2d.sh --bag ${BAG_BASENAME}.bag"
+    echo "Replay with: catkin_ws/src/nidar_map2d/scripts/view_map2d.sh --bag ${BAG_BASENAME}.bag"
   fi
 fi
 

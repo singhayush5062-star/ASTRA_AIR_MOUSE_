@@ -3,14 +3,14 @@
 #
 # THREE MODES
 # -----------
-#   scripts/view_map2d.sh                 # live: open RViz against the running sim
-#   scripts/view_map2d.sh --bag <path>    # offline: replay a recorded rosbag
-#   scripts/view_map2d.sh --check         # inspect what is publishing right now
+#   catkin_ws/src/nidar_map2d/scripts/view_map2d.sh                 # live: open RViz against the running sim
+#   catkin_ws/src/nidar_map2d/scripts/view_map2d.sh --bag <path>    # offline: replay a recorded rosbag
+#   catkin_ws/src/nidar_map2d/scripts/view_map2d.sh --check         # inspect what is publishing right now
 #
 # LIVE MODE
 # ---------
 # Requires the mission stack to be running (test_takeoff.sh brings roscore,
-# FUEL, and the Phase 5 nodes up). The layout at config/nidar_map2d.rviz has
+# FUEL, and the Phase 5 nodes up). The layout at nidar_map2d/rviz/nidar_map2d.rviz has
 # fixed_frame=world and shows /map_2d, /grid_markers, /survivor_tags in a
 # top-down orthographic camera.
 #
@@ -31,9 +31,11 @@
 # operators can debug an empty RViz view without opening RViz first.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# Lives in catkin_ws/src/nidar_map2d/scripts/; work from the repo root so --bag paths
+# like logs/bags/... resolve the same way they always have.
+cd "$(dirname "$0")/../../../.."
 
-RVIZ_CFG="config/nidar_map2d.rviz"
+RVIZ_CFG="catkin_ws/src/nidar_map2d/rviz/nidar_map2d.rviz"
 
 usage() {
     cat <<EOF

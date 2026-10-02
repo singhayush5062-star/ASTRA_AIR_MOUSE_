@@ -21,8 +21,6 @@ catkin_install_python(PROGRAMS
   scripts/mission_manager.py
   scripts/mission_telemetry_logger.py
   scripts/coverage_reporter.py
-  scripts/map_2d_slicer.py
-  scripts/grid_visualizer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

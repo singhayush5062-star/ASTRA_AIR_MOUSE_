@@ -1,10 +1,12 @@
 <launch>
-  <!-- NIDAR mission layer.
+  <!-- NIDAR mission FSM: entry, exploration hand-off, return and landing, plus the
+       coverage reporter.
 
        Loads the central configuration onto the parameter server and starts the mission
        nodes that consume it. This is additive: it does NOT start Gazebo, PX4, FAST-LIO or
-       FUEL - scripts/test_takeoff.sh brings those up, and this launch layers the mission
-       logic on top.
+       FUEL - scripts/test_takeoff.sh brings those up. Perception (nidar_perception) and the
+       2D map (nidar_map2d) are composed alongside this file by
+       nidar_bringup/launch/mission_only.launch, which is what test_takeoff.sh runs.
 
        Everything under /nidar/... comes from one file, so the EDM, the mission manager and
        the survivor detector all read the same numbers. Values that cannot be served from
@@ -16,8 +18,6 @@
   <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
   <arg name="entry_enabled" default="true"/>
   <arg name="coverage_report_enabled" default="true"/>
-  <arg name="map_2d_enabled" default="true"/>
-  <arg name="grid_visualizer_enabled" default="true"/>
 
   <rosparam command="load" file="$(arg config)"/>
   <rosparam command="load" file="$(arg grid_config)"/>
@@ -36,36 +36,4 @@
         pkg="nidar_mission" type="coverage_reporter.py" name="coverage_reporter"
         output="screen"/>
 
-  <!-- Phase 5 live 2D map. Subscribes to /sdf_map/occupancy_all, slices at
-       cruise altitude, publishes nav_msgs/OccupancyGrid at /map_2d.
-
-       Publish rate 2 Hz is chosen to match the phase plan §5.1 target and
-       to stay under the GCS bandwidth budget (§6.2: <4 Mbps combined). At
-       150x150 cells x 2 Hz that is ~45 kB/s uncompressed. -->
-  <node if="$(arg map_2d_enabled)"
-        pkg="nidar_mission" type="map_2d_slicer.py" name="map_2d_slicer"
-        output="screen">
-    <!-- 1 Hz not 2 Hz: /sdf_map/occupancy_all itself publishes at
-         map_ros/coverage_interval = 2.0 s = 0.5 Hz (see algorithm.xml), so any
-         slicer rate above 0.5 Hz just re-serialises the same cached grid to
-         ROS with no new information. 1 Hz is a compromise between "fresh
-         enough for the operator" and "not competing with FAST-LIO for CPU"
-         (2 Hz alongside NCNN inference cost measurable planner starvation
-         until Phase 5 nodes were pinned onto cores 10,11 by
-         cpu_repin_loop.sh 2026-09-11). -->
-    <param name="publish_rate" value="1.0"/>
-    <param name="z_slice_min" value="0.3"/>
-    <param name="z_slice_max" value="1.9"/>
-    <param name="cloud_topic" value="/sdf_map/occupancy_all"/>
-  </node>
-
-  <!-- Phase 5 grid overlay and survivor tag publisher. Publishes
-       /grid_markers (2 m grid lines + A1..G7 cell labels) and /survivor_tags
-       (per-confirmed-survivor sphere + text cell tag). Both are latched
-       MarkerArrays so a late-joining GCS gets the full set. -->
-  <node if="$(arg grid_visualizer_enabled)"
-        pkg="nidar_mission" type="grid_visualizer.py" name="grid_visualizer"
-        output="screen">
-    <param name="frame_id" value="world"/>
-  </node>
 </launch>

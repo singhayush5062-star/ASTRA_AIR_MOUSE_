@@ -16,4 +16,5 @@
   <exec_depend>nidar_config</exec_depend>
   <exec_depend>nidar_mission</exec_depend>
   <exec_depend>nidar_perception</exec_depend>
+  <exec_depend>nidar_map2d</exec_depend>
 </package>
