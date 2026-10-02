@@ -690,6 +690,15 @@ nidar:
     # projection is treated as unreliable and the detection is dropped
     # rather than logged at the wrong grid cell.
     max_range_m: 8.0
+    # 4.3 localisation (consumed by nidar_perception/launch/detector.launch, which sets them
+    # explicitly). target_height_m is the height of the survivor's body centre above the floor:
+    # the bbox CENTRE ray is intersected with this plane. 0.35 was fit against Gazebo ground
+    # truth (n=18 usable detections; best of 0.26-0.45 m) for the sim's sitting.dae T-pose
+    # mannequins -- a real dummy needs its own value, measured.
+    target_height_m: 0.35
+    border_margin_px: 6          # drop boxes touching the image edge: truncated, centre biased
+    min_box_px: 20               # drop boxes thinner than this: texture specks on walls
+    arena_margin_m: 0.3          # drop positions outside the grid by more than this
     # For Phase 4's sim-only accuracy assertion: publish the ground-truth
     # comparison to /survivors_ground_truth_check whenever
     # /gazebo/model_states is available.

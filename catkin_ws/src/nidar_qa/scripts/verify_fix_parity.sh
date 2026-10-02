@@ -102,7 +102,17 @@ fi
 # caught before the flight, not by staring at logs after it.
 chk "detector node file"        "class SurvivorDetector"           "$DETECTOR"
 chk "detector: 5Hz timer"       "1.0 / self.detect_hz"             "$DETECTOR"
-chk "detector: ground-plane BP" "_backproject_ground"              "$DETECTOR"
+# 4.3 localisation (2026-10-02). The first four tokens pin the fix for the 37-deg axis-mapping
+# bug that put tags in the wrong grid cell; "[oz, +ox, +oy]" must NOT come back.
+chk "detector: bbox-centre localise"  "def _localise"                  "$DETECTOR"
+chk "detector: sensor-frame ray"      "def pixel_ray_camera_link"      "$DETECTOR"
+chk "detector: y LEFT / z UP mapping" "-(u - cx) / fx, -(v - cy) / fy" "$DETECTOR"
+chk "detector: border/size gate"      "def box_is_usable"              "$DETECTOR"
+chk "detector: target height param"   "target_height_m"                "$DETECTOR" "$WS"/src/nidar_perception/launch/detector.launch
+chk "detector: LOC-CHECK assertion"   "\[LOC-CHECK\]"                 "$DETECTOR"
+if grep -qE "d_cam_optical\[2\],|\[d_cam_optical\[2\]" "$DETECTOR"; then
+    echo "REVERTED      detector uses the old [oz, +ox, +oy] pixel mapping in $DETECTOR"; fail=1
+fi
 chk "detector: NN tracker"      "association_radius"               "$DETECTOR"
 chk "detector: confirmation"    "confirmation_threshold"           "$DETECTOR"
 chk "detector: [SURVIVOR] log"  "\[SURVIVOR\] id=%d"               "$DETECTOR"

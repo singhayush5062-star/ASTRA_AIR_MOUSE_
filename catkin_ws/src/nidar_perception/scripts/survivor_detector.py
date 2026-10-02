@@ -1,26 +1,40 @@
 #!/usr/bin/env python3
-"""Phase 4 survivor detector node.
+"""Phase 4 survivor detector node (phase plan 4.2 detection + 4.3 3D localisation).
 
 Pipeline:
-    /camera/image_raw  -> YOLO26n@5Hz -> bbox
-    bbox bottom-centre -> pixel -> camera ray (using /camera/camera_info K)
-    camera ray -> tf into map frame -> intersect z=0 ground plane
-    position -> nearest-neighbour tracker (assoc_radius m)
+    /camera/image_raw  -> YOLO@5Hz -> bbox
+    gate: drop boxes cut off by the image border, or too small to trust
+    bbox CENTRE pixel -> ray in camera_link (x fwd, y LEFT, z UP -- Gazebo's sensor frame)
+    ray -> tf into `world` -> intersect the horizontal plane z = target_height_m
+    position -> nearest-neighbour tracker (association_radius m)
     n_obs >= confirmation_threshold -> latched /survivors publish + terminal log
 
-Ground-plane intersection is preferred over a /cloud_registered raycast because it
-does NOT require FAST-LIO to have accumulated a return at the survivor's exact
-cell. The bbox bottom-centre corresponds to the feet, and the mannequin models are
-grounded at z=0, so the geometry is exact for the sim ground truth we care about.
-The /cloud_registered raycast is retained as a fallback for cases where the ground-
-plane intersection is unphysical (ray angle too shallow, or estimated depth exceeds
-detection.max_range_m).
+Why the bbox CENTRE on a body-height plane, and not the bbox bottom on the ground. The first
+version aimed the bottom-centre pixel at z=0 ("the feet"). That is wrong here for two reasons
+found by ground-truth experiments (PLANNING_DOCS/survivor_localisation_4_3_2026-10-02.md):
+  1. The x500_vlp16 SDF rolls the camera by 180 deg, so the RAW IMAGE IS UPSIDE-DOWN (rotate a
+     frame by 180 deg and the standing T-pose mannequin is upright). The bottom of a box is
+     therefore the person's HEAD, and intersecting a head ray with the floor overshoots by
+     metres. The box centre is the body centre in either orientation.
+  2. The pixel->ray mapping assumed an upright image (see pixel_ray_camera_link).
+Aiming the box centre at a plane through the body's centre cut the median error from ~5 m to
+~0.4 m. YOLO detects as well on the upside-down frame as on a de-rotated one (15 vs 14 of 40
+poses), so the image is NOT rotated. A real dummy needs its own detection.target_height_m.
 
-The doc's Phase 4 §4.2 spec requires a smoke assertion on FAST-LIO rate that runs
+Why no /cloud_registered raycast (the phase plan suggests one). Measured in the same experiment:
+for 25 of 37 detections the lidar returned NO point within 0.9 m of the survivor (a VLP-16 fan of
++-15 deg passes over a body this low until ~4.5 m), and where points did exist they were mostly
+wall points, which made the position worse (median 0.91 m vs 0.59 m for the plane estimate). A
+line-of-sight check against the cloud rejected nothing the image-border and range gates did not.
+
+The doc's Phase 4 section 4.2 spec requires a smoke assertion on FAST-LIO rate that runs
 with the detector active. This node measures /Fast_LIO/odometry Hz over a rolling
 window and logs ROSERROR if it falls below FAST_LIO_MIN_HZ. That log is grep-able
 by scripts/verify_full_flight.py the same way verify_fix_parity.sh greps for other
 binary strings.
+
+In simulation (detection.ground_truth_check) it also compares every confirmed tag against the
+Gazebo survivor models and logs a [LOC-CHECK] line (cell match count, position error).
 """
 import math
 import os
@@ -61,13 +75,69 @@ class Grid(object):
         return 0 <= i < self.nx and 0 <= j < self.ny
 
 
+# --- Geometry (pure functions; unit-tested in nidar_perception/test) ----------
+
+def pixel_ray_camera_link(u, v, K):
+    """Unit ray through pixel (u, v), expressed in the camera_link frame.
+
+    camera_link is the frame the x500_vlp16 SDF and the static TF chain in detector.launch
+    publish, i.e. Gazebo's SENSOR frame, and Gazebo renders pixels against that frame with its
+    standard camera model: the optical axis is +X, a pixel to the RIGHT of the principal point
+    lies toward -Y and a pixel BELOW it toward -Z. That holds whatever the SDF rolls the
+    sensor by, so this mapping does not need to know the camera is mounted upside-down.
+
+    (Until 2026-10-02 this was [oz, +ox, +oy], which assumes an upright camera with +Y right and
+    +Z down. It agrees with the true ray at the image centre and nowhere else: up to 90 deg off,
+    median 37 deg, which is why tags drifted toward the arena centre.)
+    """
+    fx, fy = K[0, 0], K[1, 1]
+    cx, cy = K[0, 2], K[1, 2]
+    d = np.array([1.0, -(u - cx) / fx, -(v - cy) / fy])
+    return d / np.linalg.norm(d)
+
+
+def intersect_plane(origin, direction, z_plane, max_range, min_down=0.05):
+    """Where the ray origin + t*direction (t>0) crosses the horizontal plane z = z_plane.
+
+    Returns the 3-vector hit, or None when the ray is too close to horizontal to give a
+    meaningful intersection (direction z above -min_down), points away from the plane, or the
+    horizontal distance to the hit exceeds max_range.
+    """
+    dz = direction[2]
+    if dz > -min_down:
+        return None
+    t = (z_plane - origin[2]) / dz
+    if t <= 0:
+        return None
+    hit = origin + t * direction
+    if math.hypot(hit[0] - origin[0], hit[1] - origin[1]) > max_range:
+        return None
+    return hit
+
+
+def box_is_usable(bbox, width, height, border_px, min_side_px):
+    """Whether a YOLO box is trustworthy enough to localise from.
+
+    A box touching the image border is truncated, so its centre is biased by an unknown
+    amount: in the ground-truth experiment 10 of the 11 detections that were more than a grid
+    cell off were border-truncated. A box with a tiny side is a speck (typically texture on a
+    wall), not a body.
+    """
+    x1, y1, x2, y2 = bbox
+    if x1 <= border_px or y1 <= border_px or x2 >= width - border_px or y2 >= height - border_px:
+        return False, 'border'
+    if (x2 - x1) < min_side_px or (y2 - y1) < min_side_px:
+        return False, 'small'
+    return True, None
+
+
 # --- Tracker ---------------------------------------------------------------
 
 class Track(object):
     """A single candidate survivor being accumulated across frames."""
 
     __slots__ = ('id', 'position', 'n_obs', 'first_seen', 'last_seen',
-                 'confidence', 'published')
+                 'confidence', 'published', 'cell')
 
     def __init__(self, tid, position, first_seen, confidence):
         self.id = tid
@@ -77,6 +147,7 @@ class Track(object):
         self.last_seen = first_seen
         self.confidence = float(confidence)
         self.published = False
+        self.cell = None          # grid cell last published for this track
 
     def merge(self, position, now, confidence):
         # Running mean of observed positions - resistant to a single noisy raycast.
@@ -108,6 +179,11 @@ class SurvivorDetector(object):
         self.output_topic = rospy.get_param('~output_topic', '/survivors')
         self.marker_topic = rospy.get_param('~marker_topic', '/survivor_markers')
         self.ground_truth = bool(rospy.get_param('~ground_truth_check', True))
+        # Localisation (see the module docstring for how these were chosen)
+        self.target_height = float(rospy.get_param('~target_height_m', 0.35))
+        self.border_px = int(rospy.get_param('~border_margin_px', 6))
+        self.min_side_px = int(rospy.get_param('~min_box_px', 20))
+        self.arena_margin = float(rospy.get_param('~arena_margin_m', 0.3))
 
         # Grid (from nidar_config/config/arena_grid.yaml, loaded to the ROS param server by
         # nidar_mission.launch). Fall back to defaults if the file is missing so
@@ -206,6 +282,9 @@ class SurvivorDetector(object):
         self.tracks = []              # list of Track
         self._next_track_id = 1
         self._published_ids = set()
+        self._dirty = False           # a published track moved: republish /survivors
+        self._rejected = {'border': 0, 'small': 0, 'ray': 0, 'arena': 0}
+        self._last_loc_report = 0.0
 
         # FAST-LIO rate assertion: the Phase 4 §4.2 requirement
         self._flio_stamps = []
@@ -314,126 +393,91 @@ class SurvivorDetector(object):
         boxes = r.boxes.xyxy.cpu().numpy()
         confs = r.boxes.conf.cpu().numpy()
 
-        # 4) For each detection, back-project bbox bottom-centre and update
-        # the tracker.
+        # 4) For each usable detection, localise the bbox centre and update the tracker.
+        height, width = frame.shape[:2]
         for bbox, conf in zip(boxes, confs):
-            x1, y1, x2, y2 = bbox
-            u = 0.5 * (x1 + x2)
-            v = y2  # bottom-centre pixel: the feet
-            xyz = self._backproject_ground(u, v, header.stamp)
+            ok, why = box_is_usable(bbox, width, height, self.border_px, self.min_side_px)
+            if not ok:
+                self._rejected[why] += 1
+                continue
+            xyz = self._localise(bbox, header.stamp)
             if xyz is None:
+                self._rejected['ray'] += 1
+                continue
+            if not self._inside_arena(xyz[0], xyz[1]):
+                self._rejected['arena'] += 1
+                rospy.logdebug('[detector] dropped detection at (%.2f, %.2f): outside the arena',
+                               xyz[0], xyz[1])
                 continue
             self._update_tracker(xyz, conf, header.stamp)
 
-        # 5) Any track that just crossed the confirmation threshold gets
-        # published now.
+        # 5) Any track that just crossed the confirmation threshold gets published now; a
+        # published track whose cell changed (or that gained 5 more observations) republishes.
         self._publish_new_confirmations()
+        if self._dirty:
+            self._dirty = False
+            self._publish_state()
+        self._loc_check_report()
 
     # -- Geometry -----------------------------------------------------------
 
-    def _backproject_ground(self, u, v, stamp):
-        """Return (x, y, z) in map frame where the (u, v) ray hits z=0, or None.
+    def _localise(self, bbox, stamp):
+        """World-frame (x, y, 0) of the survivor behind `bbox`, or None.
 
-        Uses the camera intrinsics K to build a ray in the camera_link frame,
-        transforms both the ray origin and one point along it into map, then
-        solves the ray-plane intersection analytically. All the transforms
-        happen through tf2 so any lever arm / mount pose in the SDF is honoured
-        automatically -- no hand-tuned camera-to-body matrix hidden here.
+        Aims the bbox CENTRE pixel through the camera and intersects the plane z =
+        target_height_m (the height of the body's centre), then reports the point at ground
+        level (z = 0) so /survivors keeps meaning "where on the floor". Every transform goes
+        through tf2, so the SDF mount pose and FAST-LIO's pose are honoured automatically.
+
+        Positions are expressed in `world`, not `map`: the static world_to_map_tf
+        (nidar_planner/launch/nidar_fuel_upstream.launch) rotates and translates, so `map` is
+        the camera_init odometry frame and its coordinates are NOT arena coordinates. Feeding
+        map-frame values to the grid math put reported positions at x=[7.15..17.86] m, entirely
+        outside the arena (PLANNING_DOCS/survivor_detector_frame_bug_2026-09-11.md).
         """
         if self._K is None:
             return None
-        fx, fy = self._K[0, 0], self._K[1, 1]
-        cx, cy = self._K[0, 2], self._K[1, 2]
-        # In OpenCV camera-optical convention: x right, y down, z forward.
-        d_cam_optical = np.array([(u - cx) / fx, (v - cy) / fy, 1.0])
-        norm = np.linalg.norm(d_cam_optical)
-        if norm < 1e-6:
-            return None
-        d_cam_optical = d_cam_optical / norm
+        u = 0.5 * (bbox[0] + bbox[2])
+        v = 0.5 * (bbox[1] + bbox[3])
+        d_link = pixel_ray_camera_link(u, v, self._K)
 
         src_frame = self._img_frame or 'camera_link'
-        # Convert the optical ray into the camera_link TF frame this codebase
-        # publishes. The x500_vlp16 SDF's camera_joint composes two rotations
-        # (link then sensor) that resolve to a camera_link whose axes align:
-        #     cam_link +X  = look direction (forward, tilted -15 deg down)
-        #     cam_link +Y  = image right (drone's right)
-        #     cam_link +Z  = image down (perpendicular to look)
-        # So the conversion from optical (right, down, fwd) is:
-        #     cam_link.x = optical.z    (forward)
-        #     cam_link.y = optical.x    (right)
-        #     cam_link.z = optical.y    (down)
-        # NOT the standard body convention's (+z, -x, -y). Getting this wrong
-        # sends every ray into the wrong world quadrant -- run 20260911_101520
-        # produced 10 detections all off by 2-11 m before this was corrected.
-        # If you change the SDF's camera <pose>, recompute the axes with the
-        # helper block in scripts/verify_camera_link_axes.py before editing
-        # these lines.
-        d_cam_body = np.array([d_cam_optical[2],
-                               d_cam_optical[0],
-                               d_cam_optical[1]])
-
-        # Transform to WORLD frame, not `map`. The static world_to_map_tf
-        # (see nidar_planner/launch/nidar_fuel_upstream.launch) publishes world -> map with
-        # a 90 deg yaw and translation to the launch pad, so `map` in this
-        # stack is the camera_init odometry frame -- its coordinates are NOT
-        # world coordinates and cannot be fed to the arena-grid math directly.
-        # The failure mode (documented in
-        # PLANNING_DOCS/survivor_detector_frame_bug_2026-09-11.md): reported
-        # positions in run 20260911_103244 spanned x=[7.15..17.86] m, entirely
-        # outside the -7.5..7.5 arena, because we were emitting map-frame
-        # values as if they were world.
         try:
-            p0 = self._tf_point(0.0, 0.0, 0.0, src_frame, 'world', stamp)
-            p1 = self._tf_point(d_cam_body[0], d_cam_body[1], d_cam_body[2],
-                                src_frame, 'world', stamp)
+            R, t = self._world_from(src_frame, stamp)
         except Exception as e:
-            rospy.logwarn_throttle(5.0,
-                                   '[detector] tf %s->world failed: %s', src_frame, e)
+            rospy.logwarn_throttle(5.0, '[detector] tf %s->world failed: %s', src_frame, e)
             return None
+        origin = t
+        direction = R @ d_link
+        hit = intersect_plane(origin, direction, self.target_height, self.max_range)
+        if hit is None:
+            return None
+        return np.array([hit[0], hit[1], 0.0])
 
-        origin = np.array([p0.point.x, p0.point.y, p0.point.z])
-        far = np.array([p1.point.x, p1.point.y, p1.point.z])
-        d_world = far - origin
-        dz = d_world[2]
-        # Reject near-horizontal rays: the -15 deg camera tilt puts good rays
-        # around dz ~ -0.26; anything above -0.05 is close to parallel to the
-        # ground and its z=0 intersection is arbitrarily far away.
-        if dz > -0.05:
-            return None
-        t = -origin[2] / dz  # solve origin.z + t*dz = 0
-        if t <= 0 or t > self.max_range:
-            return None
-        hit = origin + t * d_world
-        return hit
-
-    def _tf_point(self, x, y, z, src_frame, dst_frame, stamp):
-        ps = PointStamped()
-        ps.header.frame_id = src_frame
-        ps.header.stamp = stamp
-        ps.point.x, ps.point.y, ps.point.z = float(x), float(y), float(z)
-        # Look up the exact transform valid at `stamp`; fall back to latest if
-        # the buffer does not have it yet (early in a run).
+    def _world_from(self, src_frame, stamp):
+        """(R, t) taking a point in src_frame to the `world` frame at `stamp`."""
+        # Look up the exact transform valid at `stamp`; fall back to latest if the buffer does
+        # not have it yet (early in a run).
         try:
-            tr = self.tf_buffer.lookup_transform(dst_frame, src_frame, stamp,
+            tr = self.tf_buffer.lookup_transform('world', src_frame, stamp,
                                                  rospy.Duration(0.1))
         except (tf2_ros.LookupException, tf2_ros.ExtrapolationException,
                 tf2_ros.ConnectivityException):
-            tr = self.tf_buffer.lookup_transform(dst_frame, src_frame,
-                                                 rospy.Time(0),
-                                                 rospy.Duration(0.5))
-        # Apply the transform manually: tf2_geometry_msgs is not always
-        # available on rospy Python paths.
+            tr = self.tf_buffer.lookup_transform('world', src_frame,
+                                                 rospy.Time(0), rospy.Duration(0.5))
+        # Apply the transform manually: tf2_geometry_msgs is not always available on rospy
+        # Python paths.
         import tf.transformations as tft
         q = tr.transform.rotation
         t = tr.transform.translation
         R = tft.quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3]
-        v = R @ np.array([ps.point.x, ps.point.y, ps.point.z]) + \
-            np.array([t.x, t.y, t.z])
-        out = PointStamped()
-        out.header.frame_id = dst_frame
-        out.header.stamp = stamp
-        out.point.x, out.point.y, out.point.z = float(v[0]), float(v[1]), float(v[2])
-        return out
+        return R, np.array([t.x, t.y, t.z])
+
+    def _inside_arena(self, x, y):
+        """Within the competition grid, plus a small margin for localisation error."""
+        m = self.arena_margin
+        return (self.grid.ox - m <= x <= self.grid.ox + self.grid.nx * self.grid.cs + m and
+                self.grid.oy - m <= y <= self.grid.oy + self.grid.ny * self.grid.cs + m)
 
     # -- Tracker ------------------------------------------------------------
 
@@ -448,7 +492,19 @@ class SurvivorDetector(object):
                 best_d = d
                 best_i = i
         if best_i >= 0:
-            self.tracks[best_i].merge(xyz, now, conf)
+            tr = self.tracks[best_i]
+            tr.merge(xyz, now, conf)
+            if tr.published:
+                # The position keeps refining after confirmation (running mean over more
+                # viewpoints). Republish when the cell changes or every 5th observation.
+                cell = self.grid.cell(tr.position[0], tr.position[1])
+                if cell != tr.cell or tr.n_obs % 5 == 0:
+                    if cell != tr.cell:
+                        rospy.loginfo('[SURVIVOR] id=%d moved to grid=(%d,%d) pos=(%.2f, %.2f) '
+                                      'n_obs=%d', tr.id, cell[0], cell[1], tr.position[0],
+                                      tr.position[1], tr.n_obs)
+                    tr.cell = cell
+                    self._dirty = True
         else:
             self.tracks.append(Track(self._next_track_id, xyz, now, conf))
             self._next_track_id += 1
@@ -471,6 +527,7 @@ class SurvivorDetector(object):
             t.published = True
             self._published_ids.add(t.id)
             gx, gy = self.grid.cell(t.position[0], t.position[1])
+            t.cell = (gx, gy)
             if not self.grid.in_bounds(gx, gy):
                 rospy.logwarn(
                     '[detector] SURVIVOR %d at (%.2f, %.2f) is OUTSIDE the '
@@ -506,11 +563,48 @@ class SurvivorDetector(object):
 
         self._publish_state()
 
+    def _loc_check_report(self):
+        """Sim only: compare every confirmed tag with the Gazebo survivor it is nearest to.
+
+        Phase plan 4.3 asks for a sim-only assertion of the tagged cell against ground truth.
+        Logs one [LOC-CHECK] line every 20 s while any tag exists; WARNs (grep-able) when a tag
+        sits in a different cell from its nearest survivor.
+        """
+        if not (self.ground_truth and self._truth):
+            return
+        now = time.time()
+        if now - self._last_loc_report < 20.0:
+            return
+        pub = [t for t in self.tracks if t.published]
+        if not pub:
+            return
+        self._last_loc_report = now
+        matched, errs, covered, bad = 0, [], set(), []
+        for t in pub:
+            name, (tx, ty) = min(self._truth.items(),
+                                 key=lambda kv: math.hypot(t.position[0] - kv[1][0],
+                                                           t.position[1] - kv[1][1]))
+            err = math.hypot(t.position[0] - tx, t.position[1] - ty)
+            errs.append(err)
+            if self.grid.cell(t.position[0], t.position[1]) == self.grid.cell(tx, ty):
+                matched += 1
+                covered.add(name)
+            else:
+                bad.append('id%d~%s(%.1fm)' % (t.id, name, err))
+        line = ('[LOC-CHECK] tags=%d cell_match=%d/%d survivors_covered=%d/%d '
+                'median_err=%.2fm max_err=%.2fm rejected=%s'
+                % (len(pub), matched, len(pub), len(covered), len(self._truth),
+                   float(np.median(errs)), max(errs), dict(self._rejected)))
+        if bad:
+            rospy.logwarn('%s | assertion FAILED, wrong cell: %s', line, ', '.join(bad))
+        else:
+            rospy.loginfo(line)
+
     def _publish_state(self):
         msg = SurvivorArray()
         msg.header.stamp = rospy.Time.now()
         # 'world' matches the frame the positions are now expressed in (see
-        # _backproject_ground). Anything downstream that draws these on the
+        # _localise). Anything downstream that draws these on the
         # /map_2d OccupancyGrid needs to know the frame is world, not map.
         msg.header.frame_id = 'world'
         for t in self.tracks:

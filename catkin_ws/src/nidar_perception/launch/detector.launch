@@ -35,7 +35,7 @@
 
   <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26n
        at 5 Hz (mission_config.yaml: nidar/detection/detect_hz), back-projects to the
-       ground plane, tracks with a 0.75 m NN radius, publishes latched /survivors on
+       a body-height plane, tracks with a 0.75 m NN radius, publishes latched /survivors on
        three consistent detections. Ground-truth-vs-tag comparison is printed inline
        when /gazebo/model_states is available.
 
@@ -55,6 +55,13 @@
     <param name="confirmation_threshold" value="3"/>
     <param name="stale_timeout_s" value="10.0"/>
     <param name="max_range_m" value="8.0"/>
+    <!-- 4.3 localisation: aim the bbox CENTRE at a plane through the body centre (the raw image is
+         upside-down, so the box bottom is the head, not the feet), and drop truncated / tiny boxes. See survivor_detector.py and
+         PLANNING_DOCS/survivor_localisation_4_3_2026-10-02.md for the measurements. -->
+    <param name="target_height_m" value="0.35"/>
+    <param name="border_margin_px" value="6"/>
+    <param name="min_box_px" value="20"/>
+    <param name="arena_margin_m" value="0.3"/>
     <param name="input_topic" value="/camera/image_raw"/>
     <param name="camera_info_topic" value="/camera/camera_info"/>
     <param name="output_topic" value="/survivors"/>

@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""Verify the camera_link TF chain matches survivor_detector.py's axis
-convention.
+"""Verify the camera_link TF chain against survivor_detector.py's pixel->ray model.
 
-Any edit to the x500_vlp16 SDF's <link name="camera_link"> or its child
-<sensor name="camera"> can silently break the survivor detector's
-back-projection. This script re-derives the camera_link axes as they appear
-in base_link from the two SDF poses, and prints:
+Any edit to the x500_vlp16 SDF's <link name="camera_link"> or its child <sensor name="camera">
+can silently break the survivor detector's back-projection. This script re-derives the
+camera_link axes as they appear in base_link from the two SDF poses, and prints:
 
-    * where each cam_link axis points (in base_link)
-    * whether that matches the convention survivor_detector expects
-    * whether the derived world look direction matches -15 deg elevation
+    * where each camera_link axis points (in base_link)
+    * whether the look direction (+X) is the expected -15 deg tilt        (ASSERTED)
+    * which way the raw image is oriented                                  (REPORTED)
 
-Run without arguments; the SDF poses are hard-coded here on purpose so a
-divergence from the SDF is caught by inspecting this file's constants
-against the SDF, not by a runtime tf lookup.
+camera_link is Gazebo's SENSOR frame. Gazebo renders pixels against it with its standard camera
+model (optical axis +X, image right = -Y, image down = -Z) whatever roll the SDF gives the
+sensor, and survivor_detector.pixel_ray_camera_link uses exactly that model. So the detector is
+correct for any camera roll; what the roll changes is only whether the raw image is upright.
+With the current SDF poses the sensor is rolled 180 deg, so the raw image is UPSIDE-DOWN
+(verified 2026-10-02 by rotating a frame: the survivors are then upright). YOLO does as well on
+it as on a de-rotated frame, so the detector does not rotate it.
+
+(Until 2026-10-02 this script labelled +Y "image right" and +Z "image down" but asserted only
++X, so a wrong y/z convention in the detector passed this check. The labels below are the
+Gazebo convention, and the pixel-ray unit tests in nidar_perception/test pin the mapping.)
+
+Run without arguments; the SDF poses are hard-coded here on purpose so a divergence from the SDF
+is caught by inspecting this file's constants against the SDF, not by a runtime tf lookup.
 
 If your SDF poses differ from the constants below, update BOTH here and in
 catkin_ws/src/nidar_qa/scripts/verify_fix_parity.sh (which is what CI greps).
@@ -55,9 +64,9 @@ def main():
     R = R_link @ R_sensor
 
     print('camera_link derived axes (in base_link):')
-    axes = {'+X (look direction)': [1, 0, 0],
-            '+Y (image right)':    [0, 1, 0],
-            '+Z (image down)':     [0, 0, 1]}
+    axes = {'+X (look direction)':      [1, 0, 0],
+            '+Y (sensor left; right = -Y)': [0, 1, 0],
+            '+Z (sensor up; down = -Z)':    [0, 0, 1]}
     for label, axis in axes.items():
         v = R @ np.array(axis)
         print('  %-22s -> (%+.4f, %+.4f, %+.4f)' % (label, v[0], v[1], v[2]))
@@ -79,7 +88,12 @@ def main():
         return 1
 
     print()
-    print('OK: camera_link axes match survivor_detector.py conventions.')
+    z_up = (R @ np.array([0.0, 0.0, 1.0]))[2]      # base_link +Z is up
+    print('Image orientation: sensor +Z has an up-component of %+.3f in base_link -> the raw image '
+          'is %s.' % (z_up, 'UPRIGHT' if z_up > 0 else 'UPSIDE-DOWN (expected with the current SDF)'))
+    print()
+    print('OK: look direction matches. The detector uses the sensor-frame camera model, which is '
+          'correct for any camera roll.')
     return 0
 
 
