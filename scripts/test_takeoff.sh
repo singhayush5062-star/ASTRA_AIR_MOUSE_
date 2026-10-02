@@ -125,17 +125,20 @@ roslaunch px4 mavros_posix_sitl.launch vehicle:=$VEHICLE world:=/home/developer/
 SIM_PID=$!
 
 echo "Waiting for MAVROS to connect to PX4 (up to 60 seconds)..."
+MAVROS_CONNECTED=0
 for i in {1..60}; do
-    STATUS=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_state', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.connected)" 2>/dev/null)
+    STATUS=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_state', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=5.0); print(msg.connected)" 2>/dev/null)
     if [ "$STATUS" = "True" ]; then
         echo "MAVROS Connected!"
+        MAVROS_CONNECTED=1
         break
     fi
     sim_sleep 1
 done
 
-STATUS=$(python3 -c "import rospy; from mavros_msgs.msg import State; rospy.init_node('test_takeoff_state', anonymous=True); msg = rospy.wait_for_message('/mavros/state', State, timeout=2.0); print(msg.connected)" 2>/dev/null)
-if [ "$STATUS" != "True" ]; then
+# Trust the loop's result: a second one-shot probe right after sim boot can
+# time out under load and falsely report a disconnect.
+if [ "$MAVROS_CONNECTED" != "1" ]; then
     echo "Error: MAVROS failed to connect to PX4. Exiting."
     killall -9 rosmaster rosout roslaunch gzserver gzclient px4 mavros_node rostopic px4-simulator_mavlink 2>/dev/null || true
     exit 1
