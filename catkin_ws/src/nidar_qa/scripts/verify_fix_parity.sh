@@ -136,6 +136,13 @@ echo "--- phase 5: live 2D map + tagging ---"
 chk "map_2d_slicer node file"   "class Map2DSlicer"                 "$MAP2D"
 chk "map_2d: /map_2d publisher" "'/map_2d'"                         "$MAP2D"
 chk "map_2d: OccupancyGrid"     "nav_msgs.msg import OccupancyGrid" "$MAP2D"
+# The /map_2d actually flown (map2d.launch map_source:=lidar): LiDAR ray-cast occupancy, walls
+# AND explored floor. Reverting the launch default to the FUEL slice brings back a walls-only map
+# that misses the outer walls (2026-10-02 measurement: 26-50 % of real walls present).
+LIDARMAP=$WS/src/nidar_map2d/scripts/lidar_map_2d.py
+chk "lidar_map_2d node file"    "class LidarMap2D"                  "$LIDARMAP"
+chk "lidar_map_2d: free space"  "def ray_cells"                     "$LIDARMAP"
+chk "map2d.launch: lidar source" "<arg name=\"map_source\" default=\"lidar\"/>" "$WS/src/nidar_map2d/launch/map2d.launch"
 chk "grid_visualizer node file" "class GridVisualizer"              "$GRIDVIZ"
 chk "grid_viz: /grid_markers"   "'/grid_markers'"                   "$GRIDVIZ"
 chk "grid_viz: /survivor_tags"  "'/survivor_tags'"                  "$GRIDVIZ"

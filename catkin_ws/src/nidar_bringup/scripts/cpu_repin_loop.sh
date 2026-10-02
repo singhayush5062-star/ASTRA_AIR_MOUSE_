@@ -48,6 +48,7 @@ while true; do
     pin_all_threads "traj_server" "8,9"
     pin_all_threads "survivor_detector.py" "10,11"
     pin_all_threads "map_2d_slicer.py" "10,11"
+    pin_all_threads "lidar_map_2d.py" "10,11"
     pin_all_threads "grid_visualizer.py" "10,11"
     pin_all_threads "coverage_reporter.py" "10,11"
     pin_all_threads "mission_manager.py" "6,7"

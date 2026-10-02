@@ -48,7 +48,7 @@ PKILL_F = ['flight_envelope_guard.py', 'relay_odometry.py', 'exploration_node', 
            'waypoint_generator', 'fast_lio', 'FAST_LIO', 'cpu_repin_loop.sh', 'rviz',
            'mission_telemetry_logger.py', 'mission_manager.py', 'entry_detection_module.py',
            'robot_state_publisher', 'static_transform_publisher',
-           'survivor_detector.py', 'coverage_reporter.py', 'map_2d_slicer.py', 'grid_visualizer.py']
+           'survivor_detector.py', 'coverage_reporter.py', 'map_2d_slicer.py', 'lidar_map_2d.py', 'grid_visualizer.py']
 
 
 class Watchdog(object):

@@ -45,6 +45,7 @@ pkill -f static_transform_publisher 2>/dev/null || true
 pkill -f survivor_detector.py 2>/dev/null || true
 pkill -f coverage_reporter.py 2>/dev/null || true
 pkill -f map_2d_slicer.py 2>/dev/null || true
+pkill -f lidar_map_2d.py 2>/dev/null || true
 pkill -f grid_visualizer.py 2>/dev/null || true
 # Give the SIGKILLs time to land before spawning replacements -- `killall` returns immediately and
 # gzserver in particular (a /bin/sh wrapper plus a forked child) can outlive the call by a second.

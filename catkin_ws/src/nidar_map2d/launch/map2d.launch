@@ -1,12 +1,17 @@
 <launch>
-  <!-- NIDAR live 2D map (Phase 5): /map_2d occupancy floorplan sliced from FUEL's map,
-       plus the /grid_markers overlay and /survivor_tags. Consumes /sdf_map/occupancy_all
-       and /survivors; owns no motion. Loads the central configuration itself so it also
-       runs standalone (e.g. against a replayed bag). -->
+  <!-- NIDAR live 2D map (Phase 5): /map_2d occupancy floorplan, plus the /grid_markers
+       overlay and /survivor_tags. Owns no motion. Loads the central configuration itself so it
+       also runs standalone (e.g. against a replayed bag).
+
+       map_source:=lidar (default) builds /map_2d from FAST-LIO's registered LiDAR scans
+       (lidar_map_2d.py): walls AND explored floor, outer walls included. map_source:=fuel runs
+       the older slice of FUEL's /sdf_map/occupancy_all (map_2d_slicer.py), which carries
+       occupied voxels only and stops 0.7 m inside the arena; kept for comparison. -->
 
   <arg name="config" default="$(find nidar_config)/config/mission_config.yaml"/>
   <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
   <arg name="map_2d_enabled" default="true"/>
+  <arg name="map_source" default="lidar"/>
   <arg name="grid_visualizer_enabled" default="true"/>
 
   <rosparam command="load" file="$(arg config)"/>
@@ -18,7 +23,20 @@
        Publish rate 2 Hz is chosen to match the phase plan §5.1 target and
        to stay under the GCS bandwidth budget (§6.2: <4 Mbps combined). At
        150x150 cells x 2 Hz that is ~45 kB/s uncompressed. -->
-  <node if="$(arg map_2d_enabled)"
+  <node if="$(eval arg('map_2d_enabled') and arg('map_source') == 'lidar')"
+        pkg="nidar_map2d" type="lidar_map_2d.py" name="lidar_map_2d" output="screen">
+    <!-- 0.05 m cells; walls are returns 0.30-2.20 m above the floor (below the 2.44 m net);
+         free space is every cell a laser ray crossed. Scans are integrated at up to 5 Hz. -->
+    <param name="resolution" value="0.05"/>
+    <param name="hit_z_min" value="0.30"/>
+    <param name="hit_z_max" value="2.20"/>
+    <param name="max_range" value="12.0"/>
+    <param name="max_scan_rate" value="5.0"/>
+    <param name="publish_rate" value="1.0"/>
+    <param name="cloud_topic" value="/cloud_registered"/>
+  </node>
+
+  <node if="$(eval arg('map_2d_enabled') and arg('map_source') == 'fuel')"
         pkg="nidar_map2d" type="map_2d_slicer.py" name="map_2d_slicer"
         output="screen">
     <!-- 1 Hz not 2 Hz: /sdf_map/occupancy_all itself publishes at
