@@ -88,6 +88,14 @@ pkill -f entry_detection_module.py 2>/dev/null || true
 # alive with no simulation running.
 pkill -f robot_state_publisher 2>/dev/null || true
 pkill -f static_transform_publisher 2>/dev/null || true
+# The mission-layer Python nodes (started by mission_only.launch) were missing too. `killall -9
+# roslaunch` above kills only the launcher, which orphans its children rather than stopping them,
+# so a previous run's detector / slicer / overlay / coverage reporter kept running alongside the
+# next run's copies (found alive 55 min after their run ended on 2026-10-02).
+pkill -f survivor_detector.py 2>/dev/null || true
+pkill -f coverage_reporter.py 2>/dev/null || true
+pkill -f map_2d_slicer.py 2>/dev/null || true
+pkill -f grid_visualizer.py 2>/dev/null || true
 # Give the SIGKILLs time to land before spawning replacements -- `killall` returns immediately and
 # gzserver in particular (a /bin/sh wrapper plus a forked child) can outlive the call by a second.
 sleep 3
@@ -95,7 +103,14 @@ rm -rf "$HOME/.ros/dataman" "$HOME/.ros/eeprom" "$HOME/.ros/parameters.bson" "$H
 
 sim_sleep() {
     local duration=$1
-    python3 -c "import rospy; rospy.init_node('sim_sleep_node', anonymous=True); rospy.sleep($duration)" 2>/dev/null || sleep $duration
+    # rospy.init_node() blocks FOREVER when no rosmaster is reachable -- which is exactly the state
+    # after the crash watchdog tears the stack down at the end of a run, so the post-run rosbag wait
+    # below used to hang here indefinitely (the script never reached "execution complete" and left
+    # the mission-layer nodes running). Sleep on sim time only while a master is up; otherwise fall
+    # back to wall-clock time. The timeout covers a master that dies between the check and the sleep.
+    python3 -c "import rosgraph, sys; sys.exit(0 if rosgraph.is_master_online() else 1)" 2>/dev/null \
+        && timeout $((duration + 60)) python3 -c "import rospy; rospy.init_node('sim_sleep_node', anonymous=True); rospy.sleep($duration)" 2>/dev/null \
+        || sleep $duration
 }
 
 # CPU pinning (6 physical cores / 12 threads on this machine -- lscpu -p pairs: 0,1 / 2,3 / 4,5 / 6,7 / 8,9 / 10,11
