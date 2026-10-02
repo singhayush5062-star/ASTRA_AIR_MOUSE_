@@ -7,6 +7,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/analyze_exploration.py
+  scripts/map_accuracy.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

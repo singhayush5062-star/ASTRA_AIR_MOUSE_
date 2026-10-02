@@ -14,4 +14,7 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <exec_depend>rospy</exec_depend>
+  <exec_depend>rosbag</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+  <exec_depend>nidar_sim</exec_depend>
 </package>
