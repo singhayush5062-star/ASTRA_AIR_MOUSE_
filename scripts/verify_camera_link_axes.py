@@ -16,7 +16,7 @@ divergence from the SDF is caught by inspecting this file's constants
 against the SDF, not by a runtime tf lookup.
 
 If your SDF poses differ from the constants below, update BOTH here and in
-scripts/verify_fix_parity.sh (which is what CI greps).
+catkin_ws/src/nidar_qa/scripts/verify_fix_parity.sh (which is what CI greps).
 """
 import math
 import sys

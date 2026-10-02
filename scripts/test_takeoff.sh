@@ -46,7 +46,7 @@ export LIBGL_ALWAYS_SOFTWARE=0
 # and one of them lost 136 s of its 164 s stall to the exact race the missing code prevents.
 # Set SKIP_PARITY=1 to fly anyway (e.g. deliberately testing a baseline).
 if [ "${SKIP_PARITY:-0}" != "1" ]; then
-    if ! "$(dirname "$0")/verify_fix_parity.sh"; then
+    if ! "$(dirname "$0")/../catkin_ws/src/nidar_qa/scripts/verify_fix_parity.sh"; then
         echo
         echo "Refusing to launch: the code you think you are testing is not what would run."
         echo "  python3 scripts/apply_handshake_fix.py && catkin build exploration_manager"

@@ -17,7 +17,7 @@ Answers two questions a log grep cannot:
      committed to, because re-targeting a place it has already finished is a different failure
      (a frontier that will not die) from merely flying through it.
 
-Usage:  python3 scripts/analyze_exploration.py [seconds]   (default: until Ctrl-C)
+Usage:  python3 catkin_ws/src/nidar_qa/scripts/analyze_exploration.py [seconds]   (default: until Ctrl-C)
 Writes a JSON summary next to the log for later comparison.
 """
 import json

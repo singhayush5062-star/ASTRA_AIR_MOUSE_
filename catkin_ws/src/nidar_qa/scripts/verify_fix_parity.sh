@@ -8,7 +8,8 @@
 # Run 101738 cost 136 s of its 164 s stall to the exact race the missing code prevents. Nothing
 # in the launch, the build, or the flight log said the code was gone -- only the wording of one
 # log line did. Run this before every test.
-cd "$(dirname "$0")/.." || exit 1
+# Lives in catkin_ws/src/nidar_qa/scripts/; every path below is relative to the repo root.
+cd "$(dirname "$0")/../../../.." || exit 1
 WS=catkin_ws
 NODE=$WS/devel/.private/exploration_manager/lib/exploration_manager/exploration_node
 AP=$WS/devel/lib/libactive_perception.so

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_qa</name>
+  <version>0.1.0</version>
+  <description>
+    Quality gates for NIDAR, no runtime nodes: verify_fix_parity.sh (pre-flight check that
+    the fixes under test are really in the source and the built binaries, and that every
+    launch file is well-formed XML) and analyze_exploration.py (live exploration report).
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+</package>

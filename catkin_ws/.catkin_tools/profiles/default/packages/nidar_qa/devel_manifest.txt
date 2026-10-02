@@ -1,0 +1,5 @@
+nidar_qa
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_qa/lib/nidar_qa/analyze_exploration.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_qa/analyze_exploration.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_qa/lib/pkgconfig/nidar_qa.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_qa.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_qa/share/nidar_qa/cmake/nidar_qaConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_qa/cmake/nidar_qaConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_qa/share/nidar_qa/cmake/nidar_qaConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_qa/cmake/nidar_qaConfig.cmake
