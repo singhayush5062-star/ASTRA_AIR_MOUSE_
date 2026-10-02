@@ -75,6 +75,9 @@ pkill -f rviz 2>/dev/null || true
 pkill -f mission_telemetry_logger.py 2>/dev/null || true
 pkill -f flightlog/record.py 2>/dev/null || true
 pkill -f flightlog/watchdog.py 2>/dev/null || true
+# mission_manager.py was entry_detection_module.py before the package split; keep killing the old
+# name too so an orphan from a pre-split checkout cannot survive into this run.
+pkill -f mission_manager.py 2>/dev/null || true
 pkill -f entry_detection_module.py 2>/dev/null || true
 # robot_state_publisher / static_transform_publisher are started by nidar_mapping.launch and are
 # not among the `killall` names either, so they accumulate across runs -- five of them were found
@@ -386,7 +389,7 @@ echo "Clean Upstream FUEL Autonomous Exploration Running!"
 echo "Architecture: FAST-LIO2 -> Upstream FUEL -> Flight Envelope Guard -> MAVROS -> PX4"
 echo "============================================================"
 
-/home/developer/NIDAR/scripts/mission_telemetry_logger.py
+/home/developer/NIDAR/catkin_ws/src/nidar_mission/scripts/mission_telemetry_logger.py
 
 # The telemetry logger above runs in the foreground, so reaching here means the run is over.
 # Stop the recorder cleanly (its shutdown hook writes a final flush) and consolidate the

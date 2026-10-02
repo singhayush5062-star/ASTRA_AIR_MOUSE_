@@ -13,7 +13,7 @@ WS=catkin_ws
 NODE=$WS/devel/.private/exploration_manager/lib/exploration_manager/exploration_node
 AP=$WS/devel/lib/libactive_perception.so
 PM=$WS/devel/lib/libplan_manage.so
-EDM=$WS/src/nidar_mission/scripts/entry_detection_module.py
+EDM=$WS/src/nidar_mission/scripts/mission_manager.py
 FSM=$WS/src/fuel/fuel_planner/exploration_manager/src/fast_exploration_fsm.cpp
 fail=0
 chk() {  # chk <label> <needle> <file...>
@@ -109,7 +109,7 @@ chk "coverage: 5 thresholds"    "20.0, 40.0, 60.0, 80.0, 95.0"     "$COVERAGE"
 # overshoots or times out used to jump straight to AUTO.LAND, leaving PX4
 # to blind-land mid-arena (see run 20260911_101520 t=527). DESCEND flies to
 # (0, 0) camera_init first.
-EDM_SRC=$WS/src/nidar_mission/scripts/entry_detection_module.py
+EDM_SRC=$WS/src/nidar_mission/scripts/mission_manager.py
 chk "EDM: DESCEND state"        "DESCEND = \"DESCEND\""            "$EDM_SRC"
 chk "EDM: run_descend"          "def run_descend"                   "$EDM_SRC"
 chk "EDM: RETURN->DESCEND"      "MissionState.DESCEND"              "$EDM_SRC"

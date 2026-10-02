@@ -46,7 +46,7 @@ KILLALL = ['rosmaster', 'rosout', 'roslaunch', 'gzserver', 'gzclient', 'px4',
            'mavros_node', 'rostopic', 'px4-simulator_mavlink']
 PKILL_F = ['flight_envelope_guard.py', 'relay_odometry.py', 'exploration_node', 'traj_server',
            'waypoint_generator', 'fast_lio', 'FAST_LIO', 'cpu_repin_loop.sh', 'rviz',
-           'mission_telemetry_logger.py', 'entry_detection_module.py',
+           'mission_telemetry_logger.py', 'mission_manager.py', 'entry_detection_module.py',
            'robot_state_publisher', 'static_transform_publisher']
 
 

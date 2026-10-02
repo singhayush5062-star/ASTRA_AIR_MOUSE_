@@ -47,7 +47,7 @@
        flight_envelope_guard.py) from the launch pad, through the arena opening, and hands
        over to FUEL once inside. -->
   <node if="$(arg entry_enabled)"
-        pkg="nidar_mission" type="entry_detection_module.py" name="entry_detection_module"
+        pkg="nidar_mission" type="mission_manager.py" name="entry_detection_module"
         output="screen"/>
 
   <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26n

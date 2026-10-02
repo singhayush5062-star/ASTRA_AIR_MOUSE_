@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Re-apply the /mission/stop_exploration handshake. Idempotent: safe to run any time.
 
-This exists because entry_detection_module.py and fast_exploration_fsm.cpp have twice been
+This exists because entry_detection_module.py (now nidar_mission/scripts/mission_manager.py)
+and fast_exploration_fsm.cpp have twice been
 rewritten back to a pre-handshake state (2026-09-09 09:29:36 and 10:49:15, both times within
 the same second, both times only these two files). Each revert silently cost a test run, so
 recovery needs to be one command rather than a re-derivation. Run it, then rebuild:
@@ -11,7 +12,7 @@ recovery needs to be one command rather than a re-derivation. Run it, then rebui
 import os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EDM = os.path.join(ROOT, 'catkin_ws/src/nidar_mission/scripts/entry_detection_module.py')
+EDM = os.path.join(ROOT, 'catkin_ws/src/nidar_mission/scripts/mission_manager.py')
 FSM = os.path.join(ROOT, 'catkin_ws/src/fuel/fuel_planner/exploration_manager/src/fast_exploration_fsm.cpp')
 HDR = os.path.join(ROOT, 'catkin_ws/src/fuel/fuel_planner/exploration_manager/include/exploration_manager/fast_exploration_fsm.h')
 
@@ -89,7 +90,7 @@ edit(FSM, 'stopExplorationCallback', [
   '  }\n'),
 ])
 
-print('entry_detection_module.py:')
+print('mission_manager.py:')
 edit(EDM, 'pub_stop_exploration', [
  ('        self.plateau_fired = False            # one-shot latch',
   '        self.plateau_fired = False            # one-shot latch\n'

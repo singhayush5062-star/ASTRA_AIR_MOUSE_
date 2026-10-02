@@ -248,7 +248,7 @@ nidar:
   # without consulting the map at all.
   return:
     # Hard cap on the return leg. On expiry DESCEND takes over (not LAND directly). See the
-    # entry_detection_module.py MissionState.DESCEND docstring for why.
+    # mission_manager.py MissionState.DESCEND docstring for why.
     # 240 s covers the ~21 m arena diagonal at max_vel 0.6 with a wide margin for the
     # waypoint-by-waypoint stepping.
     max_duration: 240.0
@@ -259,7 +259,7 @@ nidar:
   # Runs after RETURN. Steers the vehicle to the pad centre before handing to PX4 AUTO.LAND.
   # Exists because a RETURN that overshoots or times out used to jump straight to AUTO.LAND,
   # so PX4 descended vertically from mid-arena rather than from over the pad. See
-  # entry_detection_module.py run_descend() for the state machine.
+  # mission_manager.py run_descend() for the state machine.
   descend:
     # Radius around the pad centre at which we hand off to AUTO.LAND. 0.40 m is inside the
     # pad's 0.75 m half-width, comfortably clear of the pad edge.
@@ -271,7 +271,7 @@ nidar:
   # ---------------------------------------------------------------------------
   # EXPLORATION COMPLETION (coverage plateau)
   # ---------------------------------------------------------------------------
-  # A SECOND completion condition, consumed by entry_detection_module.py. FUEL's own
+  # A SECOND completion condition, consumed by mission_manager.py. FUEL's own
   # /exploration_completed remains the primary path and is untouched; this only matters when
   # FUEL has not yet declared finish.
   #
@@ -284,7 +284,7 @@ nidar:
   # ~1 % of coverage.
   #
   # Calibrated 2026-09-09 by replaying the recorded coverage streams of those three runs
-  # through the real callback in entry_detection_module.py. See
+  # through the real callback in mission_manager.py. See
   # PLANNING_DOCS/phase1_coverage_plateau_completion_implementation_2026-09-09.md
   #
   # NOT the same thing as mission.coverage_plateau_window_s / coverage_plateau_threshold
@@ -804,7 +804,7 @@ nidar:
   # ---------------------------------------------------------------------------
   mission:
     phases: [IDLE, ARM, TAKEOFF, TRANSIT_IN, EXPLORE, TRANSIT_OUT, DESCEND, LAND, DISARM]
-    # ENFORCED since 2026-09-09 by entry_detection_module.py (BUG-3): before that this key
+    # ENFORCED since 2026-09-09 by mission_manager.py (BUG-3): before that this key
     # had no consumer anywhere in the tree and nothing bounded the flight at all.
     clock_limit_s: 1800.0        # 30 min hard limit per the rules
     # Reserved out of the budget to fly home, so a timeout still ends on the pad. RETURN is

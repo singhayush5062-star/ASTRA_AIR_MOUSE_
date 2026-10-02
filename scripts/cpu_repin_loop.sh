@@ -50,7 +50,7 @@ while true; do
     pin_all_threads "map_2d_slicer.py" "10,11"
     pin_all_threads "grid_visualizer.py" "10,11"
     pin_all_threads "coverage_reporter.py" "10,11"
-    pin_all_threads "entry_detection_module.py" "6,7"
+    pin_all_threads "mission_manager.py" "6,7"
     pin_all_threads "rosbag.*record" "10,11"
 
     sleep 3

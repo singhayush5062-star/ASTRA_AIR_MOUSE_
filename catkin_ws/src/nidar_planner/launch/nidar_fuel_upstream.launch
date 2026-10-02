@@ -94,7 +94,7 @@
        vehicle's setpoint. The vehicle was driven back OUTSIDE the arena to world (0.40, -8.09),
        descending, with the estimator diverging 1.50 m.
 
-       The mission publishes the trigger itself, from entry_detection_module.py, once the
+       The mission publishes the trigger itself, from nidar_mission/scripts/mission_manager.py, once the
        vehicle is actually inside. Nothing else should be able to. -->
 
   <!-- Flight Envelope Guard Parameters -->

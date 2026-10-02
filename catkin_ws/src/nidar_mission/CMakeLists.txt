@@ -18,7 +18,8 @@ catkin_package(
 )
 
 catkin_install_python(PROGRAMS
-  scripts/entry_detection_module.py
+  scripts/mission_manager.py
+  scripts/mission_telemetry_logger.py
   scripts/survivor_detector.py
   scripts/coverage_reporter.py
   scripts/map_2d_slicer.py
