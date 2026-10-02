@@ -192,7 +192,7 @@ echo "Loading Flight Envelope Guard parameters onto ROS Parameter Server..."
 rosparam load /home/developer/NIDAR/catkin_ws/src/nidar_config/config/flight_envelope_guard.yaml /
 
 echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
-/home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
+/home/developer/NIDAR/catkin_ws/src/nidar_safety/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &
 sim_sleep 1
 pin_process "flight_envelope_guard.py" "6,7"
 

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_safety</name>
+  <version>0.1.0</version>
+  <description>
+    Flight envelope guard: the last line of defence between the planner (/planning/pos_cmd)
+    and MAVROS. Validates every setpoint against the arena volume and holds position on
+    rejection. Safety-critical, so it is kept in its own package with no dependency on
+    perception, mapping or the mission FSM. Limits are loaded from
+    nidar_config/config/flight_envelope_guard.yaml.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>mavros_msgs</exec_depend>
+  <!-- PositionCommand on /planning/pos_cmd -->
+  <exec_depend>quadrotor_msgs</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+</package>
