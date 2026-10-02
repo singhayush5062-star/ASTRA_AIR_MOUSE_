@@ -1,0 +1,4 @@
+nidar_sim
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_sim/lib/pkgconfig/nidar_sim.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_sim.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_sim/share/nidar_sim/cmake/nidar_simConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_sim/cmake/nidar_simConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_sim/share/nidar_sim/cmake/nidar_simConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_sim/cmake/nidar_simConfig.cmake

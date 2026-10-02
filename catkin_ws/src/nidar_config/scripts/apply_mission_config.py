@@ -52,7 +52,7 @@ FUEL_XML = os.path.join(REPO, 'catkin_ws', 'src', 'fuel', 'fuel_planner',
                         'exploration_manager', 'launch', 'algorithm.xml')
 FUEL_LAUNCH = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_planner', 'launch', 'nidar_fuel_upstream.launch')
 GUARD_YAML = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_config', 'config', 'flight_envelope_guard.yaml')
-WORLD = os.path.join(REPO, 'nidar_competition.world')
+WORLD = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_sim', 'worlds', 'nidar_competition.world')
 
 
 def validate(cfg):
@@ -223,7 +223,7 @@ def validate(cfg):
     import glob
     import xml.etree.ElementTree as ET
     xml_files = [FUEL_XML, FUEL_LAUNCH, WORLD]
-    xml_files += glob.glob(os.path.join(REPO, 'simulation', 'custom_models', '*', '*.sdf'))
+    xml_files += glob.glob(os.path.join(REPO, 'catkin_ws', 'src', 'nidar_sim', 'models', '*', '*.sdf'))
     xml_files += glob.glob(os.path.join(
         REPO, 'simulation', 'PX4-Autopilot-v1.14.3', 'Tools', 'simulation', 'gazebo-classic',
         'sitl_gazebo-classic', 'models', 'iris_vlp16_cam', '*.sdf'))
@@ -564,7 +564,7 @@ def main():
         return 1 if total else 0
     print('%d value(s) applied.' % total)
     print('\nReminders:')
-    print('  * Gazebo needs the model path: simulation/custom_models must be on')
+    print('  * Gazebo needs the model path: catkin_ws/src/nidar_sim/models must be on')
     print('    GAZEBO_MODEL_PATH (scripts/setup_env.sh handles this).')
     print('  * Values consumed straight off the ROS param server (EDM, mission')
     print('    manager, detector) need no regeneration - they read the YAML directly.')

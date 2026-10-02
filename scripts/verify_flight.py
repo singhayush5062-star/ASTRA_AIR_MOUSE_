@@ -14,7 +14,7 @@ import sys, os, glob, struct, math, re
 import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STL = os.path.join(REPO, 'simulation', 'custom_models', 'arina_nidar', 'meshes', 'arina_nidar.stl')
+STL = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_sim', 'models', 'arina_nidar', 'meshes', 'arina_nidar.stl')
 ARENA_M2 = 158.0
 CRUISE_Z = 1.75          # height the wall cross-section is taken at
 SPAWN_XY = (0.0, -9.5)   # launch pad centre, world ENU

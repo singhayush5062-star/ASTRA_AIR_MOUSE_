@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_sim</name>
+  <version>0.1.0</version>
+  <description>
+    SIM-ONLY assets for NIDAR: the competition Gazebo world (generated from
+    nidar_config's mission_config.yaml), the arena / launch pad / tfmini / VLP-16 models,
+    and nidar_sim.launch (Gazebo + PX4 SITL + MAVROS). Nothing on the vehicle depends on
+    this package; a hardware bringup skips it entirely.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- PX4's mavros_posix_sitl.launch; px4 is on ROS_PACKAGE_PATH via scripts/setup_env.sh -->
+  <exec_depend>px4</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>mavros</exec_depend>
+</package>

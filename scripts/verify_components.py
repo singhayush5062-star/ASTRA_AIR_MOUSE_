@@ -134,7 +134,7 @@ def main():
     tr, tp, ty = quat_rpy(tf_link.orientation)
     # the beam is the sensor's +X after the sensor's own pose; recompose it here
     sens = sdf_pose(text.split('model://tfmini_lidar')[0] +
-                    open(os.path.join(REPO, 'simulation/custom_models/tfmini_lidar/model.sdf')).read(),
+                    open(os.path.join(REPO, 'catkin_ws/src/nidar_sim/models/tfmini_lidar/model.sdf')).read(),
                     '<sensor name="tfmini_lidar"') or [0, 0, 0, 0, 0, 0]
     R = mul(rpy_to_mat(tr, tp, ty), rpy_to_mat(*sens[3:6]))
     beam = [R[0][0], R[1][0], R[2][0]]

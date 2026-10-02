@@ -24,7 +24,7 @@
 #
 # ADDING A NEW ARENA
 # ------------------
-#   1. drop the .stl into simulation/custom_models/<name>/meshes/
+#   1. drop the .stl into catkin_ws/src/nidar_sim/models/<name>/meshes/
 #   2. copy the arina_nidar model.sdf/model.config and set the scale/pose
 #   3. add an entry under arenas: below and point `arena.active` at it
 #   4. re-run the generator

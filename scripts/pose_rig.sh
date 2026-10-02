@@ -35,7 +35,7 @@ import sys, os, xml.etree.ElementTree as ET
 models, root = sys.argv[1], sys.argv[2]
 files = [os.path.join(models, n, n + '.sdf') for n in
          ('x500', 'x500_vlp16', 'rig_frame', 'rig_velodyne', 'rig_tfmini', 'rig_camera')]
-files.append(os.path.join(root, 'simulation', 'custom_models', 'tfmini_lidar', 'model.sdf'))
+files.append(os.path.join(root, 'catkin_ws', 'src', 'nidar_sim', 'models', 'tfmini_lidar', 'model.sdf'))
 bad = False
 for f in files:
     if not os.path.exists(f):
@@ -52,7 +52,7 @@ EOF
 echo ""
 echo "Starting Gazebo with the GUI..."
 roslaunch gazebo_ros empty_world.launch \
-    world_name:="$ROOT_DIR/nidar_competition.world" \
+    world_name:="$ROOT_DIR/catkin_ws/src/nidar_sim/worlds/nidar_competition.world" \
     gui:=true paused:=false use_sim_time:=true &
 GZPID=$!
 

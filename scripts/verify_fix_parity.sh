@@ -143,7 +143,7 @@ chk "grid_viz: nidar_msgs import"  "from nidar_msgs.msg import"    "$GRIDVIZ"
 # or the detector has nothing to detect. Accept either the earlier <actor>
 # variant or the current static <model> variant; both mean "at least one
 # survivor is spawned by the world at load".
-WORLD=nidar_competition.world
+WORLD=$WS/src/nidar_sim/worlds/nidar_competition.world
 if [ -f "$WORLD" ]; then
     n_models=$(grep -c '<model name="survivor_' "$WORLD")
     n_actors=$(grep -c '<actor name="survivor_' "$WORLD")

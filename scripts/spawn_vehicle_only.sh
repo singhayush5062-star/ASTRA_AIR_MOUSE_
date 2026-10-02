@@ -57,7 +57,7 @@ python3 "$ROOT_DIR/scripts/check_mount_geometry.py"
 echo ""
 echo "Starting bare Gazebo (world: nidar_competition.world, for the pad as a size reference)..."
 roslaunch gazebo_ros empty_world.launch \
-    world_name:="$ROOT_DIR/nidar_competition.world" \
+    world_name:="$ROOT_DIR/catkin_ws/src/nidar_sim/worlds/nidar_competition.world" \
     gui:="$GUI" paused:=false use_sim_time:=true &
 GZPID=$!
 

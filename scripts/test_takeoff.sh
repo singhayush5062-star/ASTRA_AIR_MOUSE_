@@ -121,7 +121,7 @@ pin_process() {
 }
 
 source /home/developer/NIDAR/scripts/setup_env.sh
-roslaunch px4 mavros_posix_sitl.launch vehicle:=$VEHICLE world:=/home/developer/NIDAR/nidar_competition.world gui:=$GUI_ARG interactive:=false x:=$SPAWN_X y:=$SPAWN_Y z:=$SPAWN_Z Y:=$SPAWN_YAW > /tmp/sim_test.log 2>&1 &
+roslaunch nidar_sim nidar_sim.launch vehicle:=$VEHICLE gui:=$GUI_ARG interactive:=false x:=$SPAWN_X y:=$SPAWN_Y z:=$SPAWN_Z Y:=$SPAWN_YAW > /tmp/sim_test.log 2>&1 &
 SIM_PID=$!
 
 echo "Waiting for MAVROS to connect to PX4 (up to 60 seconds)..."
