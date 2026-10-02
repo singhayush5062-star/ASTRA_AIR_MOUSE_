@@ -89,6 +89,45 @@ class BoxGate(unittest.TestCase):
         self.assertEqual(sd.box_is_usable((100, 100, 112, 160), 640, 480, 6, 20), (False, 'small'))
 
 
+class DuplicateMerge(unittest.TestCase):
+    """The 2026-10-02 flight tagged survivor_4 three times and survivor_5 twice."""
+
+    @staticmethod
+    def track(tid, xy, n, published):
+        t = sd.Track(tid, [xy[0], xy[1], 0.0], 1.0, 0.8)
+        t.n_obs = n
+        t.published = published
+        return t
+
+    def test_nearby_confirmed_track_is_merged(self):
+        a = self.track(4, (5.81, -2.41), 12, True)
+        b = self.track(6, (5.16, -3.14), 3, False)           # 0.98 m from a
+        got = sd.merge_into_published([a, b], b, 1.5)
+        self.assertIs(got, a)
+        self.assertEqual(a.n_obs, 15)
+        # observation-weighted: moves a little, toward b
+        self.assertLess(5.16, a.position[0])
+        self.assertLess(a.position[0], 5.81)
+        self.assertGreater(a.position[0], 5.6)
+
+    def test_distinct_survivor_not_merged(self):
+        a = self.track(1, (4.0, -4.0), 10, True)
+        b = self.track(2, (6.0, -2.0), 3, False)             # 2.83 m: the sim's closest pair
+        self.assertIsNone(sd.merge_into_published([a, b], b, 1.5))
+        self.assertEqual(a.n_obs, 10)
+
+    def test_only_published_tracks_absorb(self):
+        a = self.track(1, (0.0, 0.0), 5, False)
+        b = self.track(2, (0.5, 0.0), 3, False)
+        self.assertIsNone(sd.merge_into_published([a, b], b, 1.5))
+
+    def test_picks_the_nearest_published_track(self):
+        a = self.track(1, (0.0, 0.0), 5, True)
+        c = self.track(3, (1.2, 0.0), 5, True)
+        b = self.track(2, (0.9, 0.0), 3, False)
+        self.assertIs(sd.merge_into_published([a, c, b], b, 1.5), c)
+
+
 class GroundTruthReplay(unittest.TestCase):
     """Real YOLO boxes recorded in Gazebo, localised with the production functions."""
 

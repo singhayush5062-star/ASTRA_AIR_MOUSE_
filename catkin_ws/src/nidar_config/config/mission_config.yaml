@@ -699,6 +699,9 @@ nidar:
     border_margin_px: 6          # drop boxes touching the image edge: truncated, centre biased
     min_box_px: 20               # drop boxes thinner than this: texture specks on walls
     arena_margin_m: 0.3          # drop positions outside the grid by more than this
+    merge_radius_m: 1.5          # a newly confirmed tag this close to a published one is the SAME
+                                 # person (assumes real survivors are > 1.5 m apart; the sim's
+                                 # closest pair is 2.8 m)
     # For Phase 4's sim-only accuracy assertion: publish the ground-truth
     # comparison to /survivors_ground_truth_check whenever
     # /gazebo/model_states is available.

@@ -133,6 +133,32 @@ def box_is_usable(bbox, width, height, border_px, min_side_px):
 
 # --- Tracker ---------------------------------------------------------------
 
+def merge_into_published(tracks, new, radius):
+    """Fold a just-confirmed track into an already-published one that lies within `radius`.
+
+    Two observation clusters of the SAME person can sit just beyond the association radius of
+    each other (0.77 m vs 0.75 m in the 2026-10-02 flight), which tags one survivor two or
+    three times. Every extra tag is a false positive. Returns the surviving published track
+    (position and n_obs updated, observation-weighted), or None when `new` is a distinct
+    survivor. The caller removes `new` from its list.
+    """
+    best, best_d = None, radius
+    for p in tracks:
+        if p is new or not p.published:
+            continue
+        d = math.hypot(p.position[0] - new.position[0], p.position[1] - new.position[1])
+        if d < best_d:
+            best, best_d = p, d
+    if best is None:
+        return None
+    n = best.n_obs + new.n_obs
+    best.position = (best.position * best.n_obs + new.position * new.n_obs) / n
+    best.n_obs = n
+    best.last_seen = max(best.last_seen, new.last_seen)
+    best.confidence = max(best.confidence, new.confidence)
+    return best
+
+
 class Track(object):
     """A single candidate survivor being accumulated across frames."""
 
@@ -184,6 +210,9 @@ class SurvivorDetector(object):
         self.border_px = int(rospy.get_param('~border_margin_px', 6))
         self.min_side_px = int(rospy.get_param('~min_box_px', 20))
         self.arena_margin = float(rospy.get_param('~arena_margin_m', 0.3))
+        # A newly confirmed track within this distance of an already-published tag is the same
+        # person, not a new survivor. Must stay below the closest spacing of two real survivors.
+        self.merge_radius = float(rospy.get_param('~merge_radius_m', 1.5))
 
         # Grid (from nidar_config/config/arena_grid.yaml, loaded to the ROS param server by
         # nidar_mission.launch). Fall back to defaults if the file is missing so
@@ -524,6 +553,17 @@ class SurvivorDetector(object):
             return
 
         for t in newly:
+            dup = merge_into_published(self.tracks, t, self.merge_radius)
+            if dup is not None:
+                self.tracks.remove(t)
+                dup.cell = self.grid.cell(dup.position[0], dup.position[1])
+                self._dirty = True
+                rospy.loginfo('[SURVIVOR] track %d merged into id=%d (same person, %.2f m apart): '
+                              'pos=(%.2f, %.2f) n_obs=%d', t.id, dup.id,
+                              math.hypot(t.position[0] - dup.position[0],
+                                         t.position[1] - dup.position[1]),
+                              dup.position[0], dup.position[1], dup.n_obs)
+                continue
             t.published = True
             self._published_ids.add(t.id)
             gx, gy = self.grid.cell(t.position[0], t.position[1])
