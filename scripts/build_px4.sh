@@ -8,7 +8,7 @@ export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH:+$GAZEBO_MODEL_PATH:}$ROOT_DIR/sim
 export GAZEBO_PLUGIN_PATH="${GAZEBO_PLUGIN_PATH:+$GAZEBO_PLUGIN_PATH:}$ROOT_DIR/catkin_ws/devel/lib"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$ROOT_DIR/catkin_ws/devel/lib"
 
-# Must match nidar_mission/config/mission_config.yaml's vehicle.model, which is what
+# Must match nidar_config/config/mission_config.yaml's vehicle.model, which is what
 # test_takeoff.sh spawns. Building a different target leaves the spawned airframe unbuilt.
 MODEL="${1:-gazebo-classic_x500_vlp16}"
 

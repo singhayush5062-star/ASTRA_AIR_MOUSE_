@@ -19,7 +19,6 @@ catkin_package(
 
 catkin_install_python(PROGRAMS
   scripts/entry_detection_module.py
-  scripts/apply_mission_config.py
   scripts/survivor_detector.py
   scripts/coverage_reporter.py
   scripts/map_2d_slicer.py
@@ -27,6 +26,6 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY config launch
+install(DIRECTORY launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

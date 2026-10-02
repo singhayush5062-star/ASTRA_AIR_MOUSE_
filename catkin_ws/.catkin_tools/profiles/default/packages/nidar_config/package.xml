@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_config</name>
+  <version>0.1.0</version>
+  <description>
+    Single source of truth for the NIDAR AirMouse stack. Owns mission_config.yaml (arena,
+    vehicle, planner and mission numbers), the arena grid, the flight envelope guard limits,
+    and apply_mission_config.py, which renders the derived files that cannot read the ROS
+    parameter server (FAST-LIO YAML, FUEL launch literals, vehicle SDF, Gazebo world).
+    Depends on nothing else in this repo.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>python3-yaml</exec_depend>
+</package>

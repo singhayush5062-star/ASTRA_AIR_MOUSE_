@@ -9,7 +9,7 @@ flight_envelope_guard:
   # camera_to_world()/world_to_camera(). It replaces what used to be a bare 6.5 literal inside
   # those functions, which silently became wrong as soon as the vehicle stopped spawning at
   # (0, -6.5) -- e.g. when it moved onto a launch pad outside the arena.
-  # GENERATED from nidar/launch_pad/center by nidar_mission/scripts/apply_mission_config.py.
+  # GENERATED from nidar/launch_pad/center by nidar_config/scripts/apply_mission_config.py.
   # The world->map static TF in launch/nidar_fuel_upstream.launch must match these exactly;
   # the generator writes both from the same source for that reason.
   spawn_world_x: 0.0

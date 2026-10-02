@@ -26,6 +26,8 @@
   <depend>tf</depend>
   <!-- Survivor.msg / SurvivorArray.msg for the Phase 4 detector -->
   <depend>nidar_msgs</depend>
+  <!-- mission_config.yaml + arena_grid.yaml, loaded by nidar_mission.launch -->
+  <exec_depend>nidar_config</exec_depend>
   <!-- Camera frames + tf lookups for the 3D localisation -->
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>image_transport</exec_depend>

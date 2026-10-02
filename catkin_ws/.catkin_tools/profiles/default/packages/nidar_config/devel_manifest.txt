@@ -1,0 +1,5 @@
+nidar_config
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_config/lib/nidar_config/apply_mission_config.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_config/apply_mission_config.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_config/lib/pkgconfig/nidar_config.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_config.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_config/share/nidar_config/cmake/nidar_configConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_config/cmake/nidar_configConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_config/share/nidar_config/cmake/nidar_configConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_config/cmake/nidar_configConfig-version.cmake

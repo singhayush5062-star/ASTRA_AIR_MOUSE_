@@ -9,8 +9,8 @@ It edits values IN PLACE with targeted substitutions rather than rewriting the f
 because those files carry a lot of hard-won explanatory comments that must survive.
 
 Usage:
-    rosrun nidar_mission apply_mission_config.py            # apply
-    rosrun nidar_mission apply_mission_config.py --check    # report drift, change nothing
+    rosrun nidar_config apply_mission_config.py            # apply
+    rosrun nidar_config apply_mission_config.py --check    # report drift, change nothing
 """
 
 import argparse
@@ -22,7 +22,7 @@ import sys
 import yaml
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-CONFIG = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_mission', 'config', 'mission_config.yaml')
+CONFIG = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_config', 'config', 'mission_config.yaml')
 
 # The file FAST-LIO actually loads, per launch/fast_lio/nidar_mapping.launch:
 #     <rosparam command="load" file=".../config/fast_lio/nidar_sim.yaml" />
@@ -51,7 +51,7 @@ LIDAR_BODY_LEN = 0.0717                          # the sensor cylinder's own hei
 FUEL_XML = os.path.join(REPO, 'catkin_ws', 'src', 'fuel', 'fuel_planner',
                         'exploration_manager', 'launch', 'algorithm.xml')
 FUEL_LAUNCH = os.path.join(REPO, 'launch', 'nidar_fuel_upstream.launch')
-GUARD_YAML = os.path.join(REPO, 'config', 'flight_envelope_guard.yaml')
+GUARD_YAML = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_config', 'config', 'flight_envelope_guard.yaml')
 WORLD = os.path.join(REPO, 'nidar_competition.world')
 
 
@@ -615,7 +615,7 @@ SURVIVOR_BLOCK = """    <model name="{name}">
 
 WORLD_TEMPLATE = """<?xml version="1.0" ?>
 <!-- GENERATED FILE - do not edit by hand.
-     Rendered from {config_rel} by nidar_mission/scripts/apply_mission_config.py.
+     Rendered from {config_rel} by nidar_config/scripts/apply_mission_config.py.
      Change the arena or pad there and re-run the generator. -->
 <sdf version="1.6">
   <world name="nidar_competition">

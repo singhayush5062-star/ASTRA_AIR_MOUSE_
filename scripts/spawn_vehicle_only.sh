@@ -25,7 +25,7 @@ source "$ROOT_DIR/scripts/setup_env.sh"
 # Default to the REAL pad pose from mission_config, not the world origin: the origin sits
 # inside the arena mesh, so a vehicle spawned there rests on arena geometry and can settle
 # tilted, which looks exactly like a model-stability bug but is not one.
-CFG="$ROOT_DIR/catkin_ws/src/nidar_mission/config/mission_config.yaml"
+CFG="$ROOT_DIR/catkin_ws/src/nidar_config/config/mission_config.yaml"
 SPAWN_X=$(python3 -c "import yaml;c=yaml.safe_load(open(\"$CFG\"))['nidar'];print(c['launch_pad']['center']['x'])" 2>/dev/null || echo 0.0)
 SPAWN_Y=$(python3 -c "import yaml;c=yaml.safe_load(open(\"$CFG\"))['nidar'];print(c['launch_pad']['center']['y'])" 2>/dev/null || echo -9.5)
 ZDEF=$(python3 -c "import yaml;c=yaml.safe_load(open(\"$CFG\"))['nidar'];print(round(c['launch_pad']['thickness']+c['vehicle']['belly_clearance'],3))" 2>/dev/null || echo 0.25)

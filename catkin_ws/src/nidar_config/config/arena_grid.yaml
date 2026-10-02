@@ -18,7 +18,7 @@
 # so `floor((pos - origin) / cell_size)` uniquely names the cell containing pos.
 #
 # KEEP IN SYNC with nidar/detection.grid_size and nidar/survivors.grid_size
-# in catkin_ws/src/nidar_mission/config/mission_config.yaml. apply_mission_
+# in catkin_ws/src/nidar_config/config/mission_config.yaml. apply_mission_
 # config.py does not touch this file (no downstream regeneration), so the
 # constants here have to match by hand -- verify on any grid change.
 

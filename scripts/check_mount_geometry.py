@@ -158,7 +158,7 @@ def main():
     print("Belly clearance needed in mission_config.yaml (vehicle.belly_clearance):")
     if legs and lens:
         print("  >= %.4f m (the deepest point below base_link, i.e. the feet)" % (-foot))
-    print("Run  python3 catkin_ws/src/nidar_mission/scripts/apply_mission_config.py\n"
+    print("Run  python3 catkin_ws/src/nidar_config/scripts/apply_mission_config.py\n"
           "after changing belly_clearance, to push spawn_world_z out to every consumer.")
     return 0
 

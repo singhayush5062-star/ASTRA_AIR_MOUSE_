@@ -98,5 +98,5 @@
        vehicle is actually inside. Nothing else should be able to. -->
 
   <!-- Flight Envelope Guard Parameters -->
-  <rosparam command="load" file="/home/developer/NIDAR/config/flight_envelope_guard.yaml" />
+  <rosparam command="load" file="$(find nidar_config)/config/flight_envelope_guard.yaml" />
 </launch>

@@ -18,7 +18,7 @@
 #   Gazebo                       static world/SDF XML          generator rewrites it
 #
 # So: edit THIS file, then run
-#       rosrun nidar_mission apply_mission_config.py
+#       rosrun nidar_config apply_mission_config.py
 # which renders the three derived files and prints exactly what it changed.
 # Values consumed straight off the ROS param server need no regeneration.
 #
@@ -142,7 +142,7 @@ nidar:
     #   * the length and position of the standoff mast that holds it up
     #   * FAST-LIO's mapping/extrinsic_T, which must equal the mount pose exactly
     # so raising or lowering the lidar is a single edit here followed by
-    #     rosrun nidar_mission apply_mission_config.py
+    #     rosrun nidar_config apply_mission_config.py
     # rather than three hand edits that drift apart (they did: the SDF said 0.20, the
     # generator wrote 0.28 into a file nothing loads, and the live config still said 0.12).
     #
@@ -714,7 +714,7 @@ nidar:
     required_detections: 5
     # Grid origin and cell size are shared with detection.grid_size above; the
     # detector emits grid_x, grid_y as (floor((x - grid_origin_x) / grid_size),
-    # floor((y - grid_origin_y) / grid_size)). See config/arena_grid.yaml.
+    # floor((y - grid_origin_y) / grid_size)). See nidar_config/config/arena_grid.yaml.
     grid_origin_x: -7.0
     grid_origin_y: -7.0
     grid_size: 2.0

@@ -9,13 +9,11 @@
        Everything under /nidar/... comes from one file, so the EDM, the mission manager and
        the survivor detector all read the same numbers. Values that cannot be served from
        the parameter server - FAST-LIO's own YAML, FUEL's roslaunch literals, the Gazebo
-       world - are rendered by scripts/apply_mission_config.py instead; run that after
+       world - are rendered by nidar_config/scripts/apply_mission_config.py instead; run that after
        editing the config. -->
 
-  <arg name="config" default="$(find nidar_mission)/config/mission_config.yaml"/>
-  <!-- arena_grid.yaml lives at the repo root's config/ dir. $(find nidar_mission) resolves
-       to catkin_ws/src/nidar_mission, so three '..' walks back to the repo root. -->
-  <arg name="grid_config" default="$(find nidar_mission)/../../../config/arena_grid.yaml"/>
+  <arg name="config" default="$(find nidar_config)/config/mission_config.yaml"/>
+  <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
   <arg name="entry_enabled" default="true"/>
   <arg name="detection_enabled" default="true"/>
   <arg name="coverage_report_enabled" default="true"/>

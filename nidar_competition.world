@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <!-- GENERATED FILE - do not edit by hand.
-     Rendered from catkin_ws/src/nidar_mission/config/mission_config.yaml by nidar_mission/scripts/apply_mission_config.py.
+     Rendered from catkin_ws/src/nidar_config/config/mission_config.yaml by nidar_config/scripts/apply_mission_config.py.
      Change the arena or pad there and re-run the generator. -->
 <sdf version="1.6">
   <world name="nidar_competition">

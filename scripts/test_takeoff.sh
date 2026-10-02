@@ -1,10 +1,10 @@
 #!/bin/bash
 # Spawn pose and vehicle model default to whatever
-# catkin_ws/src/nidar_mission/config/mission_config.yaml says, so moving the launch pad or
+# catkin_ws/src/nidar_config/config/mission_config.yaml says, so moving the launch pad or
 # switching the airframe is a one-line config edit rather than a hunt through shell scripts.
 # Explicit positional arguments still override, and the hardcoded fallbacks after ":-" keep the
 # script working if PyYAML or the config file is unavailable.
-MISSION_CFG="$(dirname "$0")/../catkin_ws/src/nidar_mission/config/mission_config.yaml"
+MISSION_CFG="$(dirname "$0")/../catkin_ws/src/nidar_config/config/mission_config.yaml"
 cfg() {  # cfg <python-expression-over-`c`>  <fallback>
     python3 -c "
 import yaml,sys
@@ -189,7 +189,7 @@ for i in {1..300}; do
 done
 
 echo "Loading Flight Envelope Guard parameters onto ROS Parameter Server..."
-rosparam load /home/developer/NIDAR/config/flight_envelope_guard.yaml /
+rosparam load /home/developer/NIDAR/catkin_ws/src/nidar_config/config/flight_envelope_guard.yaml /
 
 echo "Starting Flight Envelope Guard (FUEL -> MAVROS Execution Safety Layer)..."
 /home/developer/NIDAR/scripts/flight_envelope_guard.py > /tmp/bridge.log 2>&1 &

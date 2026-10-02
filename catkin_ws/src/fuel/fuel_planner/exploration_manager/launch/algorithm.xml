@@ -126,7 +126,7 @@
          planner the instant the vehicle crosses the arena threshold, when the interior is
          still unmapped, so the first plan reliably finds nothing. These bound how many times
          planning is re-attempted before exploration is accepted as genuinely complete.
-         GENERATED from nidar/planner by nidar_mission/scripts/apply_mission_config.py. -->
+         GENERATED from nidar/planner by nidar_config/scripts/apply_mission_config.py. -->
     <param name="fsm/finish_recheck_interval" value="2.0" type="double"/>
     <param name="fsm/finish_recheck_max" value="15" type="int"/>
 

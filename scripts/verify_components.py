@@ -119,7 +119,7 @@ def main():
     br, bp, by = quat_rpy(base.orientation)
     tilt = math.degrees(math.hypot(br, bp))
     cfg = yaml.safe_load(open(os.path.join(REPO,
-          'catkin_ws/src/nidar_mission/config/mission_config.yaml')))['nidar']
+          'catkin_ws/src/nidar_config/config/mission_config.yaml')))['nidar']
     pad_top = cfg['launch_pad']['thickness']
     rest = base.position.z - pad_top
     print("  base_link z %.4f  rest above pad %.4f  roll %+.3f deg  pitch %+.3f deg"

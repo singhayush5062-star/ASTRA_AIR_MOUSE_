@@ -64,7 +64,7 @@ class MultiCueEntryDetector:
 
     def __init__(self):
         # Configurable parameters
-        # Defaults come from /nidar/entry in nidar_mission/config/mission_config.yaml; a
+        # Defaults come from /nidar/entry in nidar_config/config/mission_config.yaml; a
         # private (~) param still wins for one-off experiments. The fallbacks below are sized
         # for the ARINA_NIDAR arena's measured 1.90 m south door.
         def _p(name, default):
@@ -315,7 +315,7 @@ class EntryDetectionModuleNode:
             return rospy.get_param('~' + name,
                                    rospy.get_param('/nidar/entry/' + name, default))
 
-        # Mission-level values live in nidar_mission/config/mission_config.yaml under
+        # Mission-level values live in nidar_config/config/mission_config.yaml under
         # /nidar/entry and /nidar/vehicle; private (~) params still override for one-off tests.
         self.takeoff_height = rospy.get_param(
             '~takeoff_height', rospy.get_param('/nidar/vehicle/cruise_altitude_world', 1.50))
