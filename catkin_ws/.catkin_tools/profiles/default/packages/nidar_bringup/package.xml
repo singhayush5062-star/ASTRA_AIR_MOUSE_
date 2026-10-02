@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_bringup</name>
+  <version>0.1.0</version>
+  <description>
+    Top-level composition for NIDAR AirMouse. Owns no node implementations: only the
+    launch files and the orchestration script that bring the per-subsystem packages up
+    in the right order.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>nidar_config</exec_depend>
+  <exec_depend>nidar_mission</exec_depend>
+  <exec_depend>nidar_perception</exec_depend>
+</package>

@@ -263,7 +263,7 @@ fi
 ENTRY_ARG=${ENTRY:-1}
 if [ "$ENTRY_ARG" = "1" ] || [ "$ENTRY_ARG" = "true" ]; then ENTRY_ARG=true; else ENTRY_ARG=false; fi
 echo "Launching NIDAR mission layer (entry_enabled=${ENTRY_ARG})..."
-roslaunch nidar_mission nidar_mission.launch entry_enabled:=$ENTRY_ARG > /tmp/mission.log 2>&1 &
+roslaunch nidar_bringup mission_only.launch entry_enabled:=$ENTRY_ARG > /tmp/mission.log 2>&1 &
 MISSION_PID=$!
 sim_sleep 3
 

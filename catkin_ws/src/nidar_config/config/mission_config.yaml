@@ -641,10 +641,10 @@ nidar:
   # ---------------------------------------------------------------------------
   # SURVIVOR DETECTION  (Phase 4)
   # ---------------------------------------------------------------------------
-  # Consumers: nidar_mission/scripts/survivor_detector.py.
+  # Consumers: nidar_perception/scripts/survivor_detector.py.
   # The .pt is the Ultralytics YOLO26n weights from PERSON_DETECTION_MODEL_V3
   # (single class "person", 640x640, P 0.961 / R 0.950), extracted under
-  # models/detection/ so a clone can load it without unzipping.
+  # nidar_perception/models/detection/ so a clone can load it without unzipping.
   detection:
     enabled: true
     # Repo-relative model path. survivor_detector.py resolves it relative to
@@ -655,7 +655,7 @@ nidar:
     # -- FAST-LIO starves at load average 12+). NCNN is CPU-only, benchmarked
     # at 28 ms/frame on this laptop (35 FPS), well above the 5 Hz target, and
     # is the same format we'll run on Jetson at competition time.
-    model: models/detection/PERSON_DETECTION_MODEL_V3/best.pt
+    model: catkin_ws/src/nidar_perception/models/detection/PERSON_DETECTION_MODEL_V3/best.pt
     # Detector runs at DETECT_HZ, not camera rate: the doc's Phase 4 §4.2
     # spec is "5 Hz, not camera rate", CPU headroom is worth more than
     # 30 Hz on a stationary body.

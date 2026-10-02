@@ -39,9 +39,9 @@ host_test.txt
 /yolov8n.pt
 
 # Survivor detection model download zip is throwaway; extracted contents under
-# models/detection/ are what runtime loads and ARE committed.
+# catkin_ws/src/nidar_perception/models/detection/ are what runtime loads and ARE committed.
 /PERSON_DETECTION_MODEL_V*.zip
-models/detection/**/__pycache__/
+catkin_ws/src/nidar_perception/models/detection/**/__pycache__/
 
 
 

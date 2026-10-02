@@ -1,0 +1,4 @@
+nidar_bringup
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_bringup/lib/pkgconfig/nidar_bringup.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_bringup.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_bringup/share/nidar_bringup/cmake/nidar_bringupConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_bringup/cmake/nidar_bringupConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_bringup/share/nidar_bringup/cmake/nidar_bringupConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_bringup/cmake/nidar_bringupConfig-version.cmake

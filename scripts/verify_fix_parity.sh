@@ -40,6 +40,8 @@ echo "--- launch XML well-formedness ---"
 for xml in "$WS"/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml \
            "$WS"/src/fuel/fuel_planner/exploration_manager/launch/exploration.launch \
            "$WS"/src/nidar_mission/launch/nidar_mission.launch \
+           "$WS"/src/nidar_perception/launch/detector.launch \
+           "$WS"/src/nidar_bringup/launch/mission_only.launch \
            "$WS"/src/nidar_planner/launch/nidar_fuel_upstream.launch \
            "$WS"/src/nidar_slam/launch/nidar_mapping.launch; do
     # nidar_mission.launch went malformed twice in the 2026-09-11 session, both
@@ -78,12 +80,12 @@ for pair in "$NODE:$FSM"; do
 done
 
 echo "--- phase 4: survivor detector chain ---"
-DETECTOR=$WS/src/nidar_mission/scripts/survivor_detector.py
+DETECTOR=$WS/src/nidar_perception/scripts/survivor_detector.py
 COVERAGE=$WS/src/nidar_mission/scripts/coverage_reporter.py
 MAP2D=$WS/src/nidar_mission/scripts/map_2d_slicer.py
 GRIDVIZ=$WS/src/nidar_mission/scripts/grid_visualizer.py
 SURVIVOR_MSG_PY=$WS/devel/lib/python3/dist-packages/nidar_msgs/msg/_Survivor.py
-MODEL_PT=models/detection/PERSON_DETECTION_MODEL_V3/best.pt
+MODEL_PT=$WS/src/nidar_perception/models/detection/PERSON_DETECTION_MODEL_V3/best.pt
 # Model weights: an absent .pt turns the detector node into a FATAL, which
 # under nidar_mission.launch (required=false by default for output=screen)
 # would silently vanish and leave the run looking like a healthy exploration

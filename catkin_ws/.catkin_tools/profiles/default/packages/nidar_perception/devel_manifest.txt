@@ -1,0 +1,5 @@
+nidar_perception
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_perception/lib/pkgconfig/nidar_perception.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_perception.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_perception/lib/nidar_perception/survivor_detector.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_perception/survivor_detector.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_perception/share/nidar_perception/cmake/nidar_perceptionConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_perception/cmake/nidar_perceptionConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_perception/share/nidar_perception/cmake/nidar_perceptionConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_perception/cmake/nidar_perceptionConfig-version.cmake

@@ -4,7 +4,6 @@ nidar_mission
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/lib/nidar_mission/map_2d_slicer.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_mission/map_2d_slicer.py
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/lib/nidar_mission/coverage_reporter.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_mission/coverage_reporter.py
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/lib/nidar_mission/mission_telemetry_logger.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_mission/mission_telemetry_logger.py
-/home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/lib/nidar_mission/survivor_detector.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_mission/survivor_detector.py
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/lib/pkgconfig/nidar_mission.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_mission.pc
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/share/nidar_mission/cmake/nidar_missionConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_mission/cmake/nidar_missionConfig.cmake
 /home/developer/NIDAR/catkin_ws/devel/.private/nidar_mission/share/nidar_mission/cmake/nidar_missionConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_mission/cmake/nidar_missionConfig-version.cmake

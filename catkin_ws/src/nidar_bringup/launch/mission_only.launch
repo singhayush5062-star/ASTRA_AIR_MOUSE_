@@ -1,0 +1,36 @@
+<launch>
+  <!-- NIDAR mission layer, composed: everything that runs on top of an already-flying
+       stack (PX4 + MAVROS, FAST-LIO, FUEL, flight envelope guard).
+
+       This is what scripts/test_takeoff.sh starts as "the mission layer". It brings up,
+       in one roslaunch process:
+         nidar_mission     mission FSM (entry, exploration hand-off, return, land),
+                           coverage reporter, 2D map + grid overlay
+         nidar_perception  camera TF chain + survivor detector
+
+       Every argument the pre-split nidar_mission.launch accepted is accepted here with the
+       same name and default, and forwarded to the package that now owns it. -->
+
+  <arg name="config" default="$(find nidar_config)/config/mission_config.yaml"/>
+  <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
+  <arg name="entry_enabled" default="true"/>
+  <arg name="detection_enabled" default="true"/>
+  <arg name="coverage_report_enabled" default="true"/>
+  <arg name="map_2d_enabled" default="true"/>
+  <arg name="grid_visualizer_enabled" default="true"/>
+
+  <include file="$(find nidar_mission)/launch/nidar_mission.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="grid_config" value="$(arg grid_config)"/>
+    <arg name="entry_enabled" value="$(arg entry_enabled)"/>
+    <arg name="coverage_report_enabled" value="$(arg coverage_report_enabled)"/>
+    <arg name="map_2d_enabled" value="$(arg map_2d_enabled)"/>
+    <arg name="grid_visualizer_enabled" value="$(arg grid_visualizer_enabled)"/>
+  </include>
+
+  <include file="$(find nidar_perception)/launch/detector.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="grid_config" value="$(arg grid_config)"/>
+    <arg name="detection_enabled" value="$(arg detection_enabled)"/>
+  </include>
+</launch>

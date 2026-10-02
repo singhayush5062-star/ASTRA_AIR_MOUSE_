@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_perception</name>
+  <version>0.1.0</version>
+  <description>
+    Camera bringup and survivor detection for NIDAR: the camera_link TF chain, the YOLO
+    person detector with ground-plane back-projection and NN tracking, and the model
+    weights it loads. Publishes /survivors (nidar_msgs/SurvivorArray) and
+    /survivor_markers. Survivor grid-cell math for display lives in nidar_map2d.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>tf</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>nidar_msgs</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+</package>

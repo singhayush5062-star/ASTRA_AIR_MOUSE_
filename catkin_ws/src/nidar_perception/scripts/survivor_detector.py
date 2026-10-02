@@ -132,7 +132,7 @@ class SurvivorDetector(object):
             return
 
         # Resolve the model path against the repo root, since consumers set it
-        # as 'models/detection/PERSON_DETECTION_MODEL_V3/best.pt'.
+        # repo-relative (nidar_perception/launch/detector.launch passes an absolute $(find) path).
         if not os.path.isabs(self.model_path):
             repo = os.path.dirname(os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.dirname(
@@ -140,7 +140,7 @@ class SurvivorDetector(object):
             self.model_path = os.path.join(repo, self.model_path)
         if not os.path.exists(self.model_path):
             rospy.logfatal('[detector] model not found at %s. Did you extract '
-                           'PERSON_DETECTION_MODEL_V3.zip into models/detection/? '
+                           'PERSON_DETECTION_MODEL_V3.zip into nidar_perception/models/detection/? '
                            'Expected either a .pt file or an ncnn_model directory.',
                            self.model_path)
             rospy.signal_shutdown('model missing')
