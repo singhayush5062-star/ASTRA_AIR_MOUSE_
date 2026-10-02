@@ -155,7 +155,7 @@ sim_sleep 2
 pin_process "fastlio_mapping" "0,1"
 
 echo "Starting Odometry Relay (FAST-LIO -> PX4 EKF2)..."
-/home/developer/NIDAR/scripts/relay_odometry.py > /tmp/relay.log 2>&1 &
+/home/developer/NIDAR/catkin_ws/src/nidar_platform/scripts/relay_odometry.py > /tmp/relay.log 2>&1 &
 sim_sleep 2
 pin_process "relay_odometry.py" "6,7"
 

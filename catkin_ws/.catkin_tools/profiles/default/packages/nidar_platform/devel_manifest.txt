@@ -1,0 +1,5 @@
+nidar_platform
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_platform/lib/nidar_platform/relay_odometry.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_platform/relay_odometry.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_platform/lib/pkgconfig/nidar_platform.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_platform.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_platform/share/nidar_platform/cmake/nidar_platformConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_platform/cmake/nidar_platformConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_platform/share/nidar_platform/cmake/nidar_platformConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_platform/cmake/nidar_platformConfig-version.cmake
