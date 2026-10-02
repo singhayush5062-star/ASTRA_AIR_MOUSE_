@@ -3,9 +3,9 @@
   <name>nidar_bringup</name>
   <version>0.1.0</version>
   <description>
-    Top-level composition for NIDAR AirMouse. Owns no node implementations: only the
-    launch files and the orchestration script that bring the per-subsystem packages up
-    in the right order.
+    Top-level composition for NIDAR AirMouse. Owns no node implementations: only
+    test_takeoff.sh (the end-to-end sim orchestrator: sim, SLAM, relay, guard, planner,
+    mission layer, arming, flight recorder), cpu_repin_loop.sh, and mission_only.launch.
   </description>
 
   <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
@@ -14,7 +14,14 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <exec_depend>nidar_config</exec_depend>
+  <exec_depend>nidar_sim</exec_depend>
+  <exec_depend>nidar_platform</exec_depend>
+  <exec_depend>nidar_slam</exec_depend>
+  <exec_depend>nidar_planner</exec_depend>
+  <exec_depend>nidar_safety</exec_depend>
   <exec_depend>nidar_mission</exec_depend>
   <exec_depend>nidar_perception</exec_depend>
   <exec_depend>nidar_map2d</exec_depend>
+  <exec_depend>nidar_qa</exec_depend>
+  <exec_depend>mavros</exec_depend>
 </package>

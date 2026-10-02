@@ -45,7 +45,8 @@ for xml in "$WS"/src/fuel/fuel_planner/exploration_manager/launch/algorithm.xml 
            "$WS"/src/nidar_map2d/launch/map2d.launch \
            "$WS"/src/nidar_bringup/launch/mission_only.launch \
            "$WS"/src/nidar_planner/launch/nidar_fuel_upstream.launch \
-           "$WS"/src/nidar_slam/launch/nidar_mapping.launch; do
+           "$WS"/src/nidar_slam/launch/nidar_mapping.launch \
+           "$WS"/src/nidar_sim/launch/nidar_sim.launch; do
     # nidar_mission.launch went malformed twice in the 2026-09-11 session, both
     # times a bare "--" inside an XML comment which parses in vim but roslaunch
     # refuses with a top-level RLException that leaves the drone hovering while
