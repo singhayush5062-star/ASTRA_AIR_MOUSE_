@@ -36,6 +36,7 @@ binary strings.
 In simulation (detection.ground_truth_check) it also compares every confirmed tag against the
 Gazebo survivor models and logs a [LOC-CHECK] line (cell match count, position error).
 """
+import json
 import math
 import os
 import threading
@@ -48,7 +49,7 @@ from cv_bridge import CvBridge
 from geometry_msgs.msg import Point, PointStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String
 from visualization_msgs.msg import Marker, MarkerArray
 
 from nidar_msgs.msg import Survivor, SurvivorArray
@@ -342,6 +343,13 @@ class SurvivorDetector(object):
                                              queue_size=1, latch=True)
         self.pub_markers = rospy.Publisher(self.marker_topic, MarkerArray,
                                            queue_size=1, latch=True)
+        # Raw per-frame boxes for display (the GCS camera overlay). JSON in a std_msgs/String:
+        # {"stamp", "width", "height", "latency_ms", "boxes": [{"xyxy", "conf", "usable"}]}.
+        # Published every inference tick, empty frames included, so a consumer can clear stale
+        # boxes. Nothing in the mission consumes it; /survivors stays the authoritative output.
+        self.pub_detections = rospy.Publisher(
+            rospy.get_param('~detections_topic', '/survivor_detector/detections'), String,
+            queue_size=1)
 
         # Detect at DETECT_HZ irrespective of the 15 Hz camera rate.
         self._timer = rospy.Timer(rospy.Duration(1.0 / self.detect_hz),
@@ -410,20 +418,22 @@ class SurvivorDetector(object):
                 self._flio_last_warn_time = now
 
         # 3) YOLO forward pass
+        t_infer = time.time()
         results = self.model.predict(frame, device=self.device,
                                      conf=self.conf_thresh, verbose=False)
-        if not results:
-            return
-        r = results[0]
-        if r.boxes is None or len(r.boxes) == 0:
+        latency_ms = 1000.0 * (time.time() - t_infer)
+        height, width = frame.shape[:2]
+        r = results[0] if results else None
+        if r is None or r.boxes is None or len(r.boxes) == 0:
+            self._publish_detections(header, width, height, latency_ms, [], [])
             return
 
         # Ultralytics returns xyxy in original image pixel units.
         boxes = r.boxes.xyxy.cpu().numpy()
         confs = r.boxes.conf.cpu().numpy()
+        self._publish_detections(header, width, height, latency_ms, boxes, confs)
 
         # 4) For each usable detection, localise the bbox centre and update the tracker.
-        height, width = frame.shape[:2]
         for bbox, conf in zip(boxes, confs):
             ok, why = box_is_usable(bbox, width, height, self.border_px, self.min_side_px)
             if not ok:
@@ -447,6 +457,21 @@ class SurvivorDetector(object):
             self._dirty = False
             self._publish_state()
         self._loc_check_report()
+
+    def _publish_detections(self, header, width, height, latency_ms, boxes, confs):
+        if self.pub_detections.get_num_connections() == 0:
+            return
+        self.pub_detections.publish(String(data=json.dumps({
+            'stamp': header.stamp.to_sec(),
+            'width': int(width),
+            'height': int(height),
+            'latency_ms': round(latency_ms, 1),
+            'boxes': [{'xyxy': [round(float(c), 1) for c in b],
+                       'conf': round(float(cf), 3),
+                       'usable': bool(box_is_usable(b, width, height, self.border_px,
+                                                    self.min_side_px)[0])}
+                      for b, cf in zip(boxes, confs)],
+        })))
 
     # -- Geometry -----------------------------------------------------------
 
