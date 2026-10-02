@@ -37,10 +37,19 @@ A bare Gazebo (no PX4, FAST-LIO or TF chain) with `x500_vlp16`, gravity off. The
 
 * Unit tests: 16/16.
 * Real detector node in the bare sim, fed a perfect TF from Gazebo truth, vehicle teleported around the survivors: **4/4 tags in the correct cell, median error 0.40 m**, 0 wrong-cell, 0 out-of-arena. (Only 4 of 6 survivors were tagged because the random poses never gave the other two three clean views; that is a viewing question, not a localisation one.)
-* Full flight: see §6.
+* Full flights on the finished branch (headless, `./scripts/test_takeoff.sh false`):
+
+  | Flight | Tags | In correct cell | Survivors covered | Median / max error |
+  |---|---|---|---|---|
+  | before the fix (two 2026-10-02 flights) | 9 | **1** | partial | 1–4.4 m |
+  | corrected mapping + gates | 9 | 8 | 6/6 | 0.55 m / 1.33 m |
+  | + duplicate merge (`merge_radius_m` 1.5) | **6** | **6** | **6/6** | **0.56 m / 0.80 m** |
+
+  The first corrected flight tagged `survivor_4` three times and `survivor_5` twice (two clusters of one person 0.77 m apart, just outside the 0.75 m association radius); the one wrong-cell tag was such a duplicate. The merge removed 4 duplicates in the last flight. Exploration still completed on its own (98.9 % coverage).
 
 ## 6. Limits to keep in mind
 
 * `target_height_m = 0.35` was fitted on 18 detections of the sim's `sitting.dae` mannequins. A real dummy needs its own, measured value.
 * Only about half of raw detections pass the border gate, so a survivor needs three *clean* views before it is confirmed.
-* Coverage of survivors (≥ 5 of 6 detected) depends on the flight path and camera view and is not addressed here.
+* `merge_radius_m` assumes real survivors are more than 1.5 m apart (the sim's closest pair is 2.8 m).
+* Three flights is a small sample for the "6 of 6" result; survivor coverage depends on the flight path and camera view, which vary run to run.
