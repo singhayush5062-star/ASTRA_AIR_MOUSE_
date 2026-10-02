@@ -45,7 +45,7 @@ class GridVisualizer(object):
         rospy.init_node('grid_visualizer', anonymous=False)
 
         # Frame the markers are published in. WORLD, not map: the grid
-        # origin_x/origin_y are world coordinates (see config/arena_grid.yaml)
+        # origin_x/origin_y are world coordinates (see nidar_config/config/arena_grid.yaml)
         # and the /survivors positions after the 2026-09-11 frame-bug fix are
         # in world too. Anything downstream (RViz layout, GCS panel) reads
         # this in the world frame.

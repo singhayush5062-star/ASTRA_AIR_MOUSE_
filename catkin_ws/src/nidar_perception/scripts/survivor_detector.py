@@ -109,7 +109,7 @@ class SurvivorDetector(object):
         self.marker_topic = rospy.get_param('~marker_topic', '/survivor_markers')
         self.ground_truth = bool(rospy.get_param('~ground_truth_check', True))
 
-        # Grid (from config/arena_grid.yaml, loaded to the ROS param server by
+        # Grid (from nidar_config/config/arena_grid.yaml, loaded to the ROS param server by
         # nidar_mission.launch). Fall back to defaults if the file is missing so
         # the detector still runs, but log a WARN so it is visible.
         try:

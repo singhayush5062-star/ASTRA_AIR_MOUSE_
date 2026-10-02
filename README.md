@@ -76,7 +76,7 @@ chmod +x scripts/docker_dev_start.sh
 Inside the Docker interactive shell, execute the build scripts to compile the PX4 firmware and ROS packages:
 ```bash
 # 1. Compile PX4 SITL target
-./scripts/build_px4.sh
+./catkin_ws/src/nidar_platform/scripts/build_px4.sh
 
 # 2. Compile custom ROS packages (FAST-LIO2, FUEL, Drivers)
 cd catkin_ws && catkin build
@@ -90,55 +90,51 @@ source devel/setup.bash && cd ~/NIDAR
 
 ## Repository Structure
 
-Regenerated 2026-09-04 from the actual runtime call graph of `scripts/test_takeoff.sh`, not from
-directory listings. Every path below is loaded or executed by a live run; see
-`PLANNING_DOCS/repo_cleanup_and_mind_map_2026-09-03.md` for the full trace.
+Split into one catkin package per subsystem (2026-10-02, see
+`PLANNING_DOCS/package_split_production_ready_2026-09-11.md`). Every path below is loaded or
+executed by a live `scripts/test_takeoff.sh` run; `catkin_ws/src/nidar_bringup/README.md` lists
+the bring-up order.
 
 ```directory
 NIDAR/
 ├── docker/Dockerfile              # Ubuntu 20.04 + ROS Noetic + MAVROS + Livox-SDK + FUEL toolchain
-├── nidar_competition.world        # Gazebo world loaded by test_takeoff.sh (-> model://nidar_arena)
+├── scripts/
+│   ├── test_takeoff.sh            # Entry point: thin wrapper -> nidar_bringup/scripts/test_takeoff.sh
+│   ├── setup_env.sh               # ROS/Gazebo/PX4 env + model & plugin paths
+│   ├── docker_dev_start.sh
+│   └── ...                        # dev/diagnostic tools (pose_rig, spawn_vehicle_only, verify_*)
+├── tools/flightlog/               # flight recorder, crash watchdog, run-bundle packer
 ├── catkin_ws/src/
-│   ├── FAST_LIO/                  # LiDAR-inertial SLAM; publishes /Fast_LIO/odometry (Z pinned to TFmini)
-│   ├── fuel/                      # FUEL exploration planner (exploration_manager, plan_manage,
-│   │                              #   bspline_opt, plan_env, path_searching, active_perception, ...)
+│   ├── nidar_msgs/                # Survivor.msg, SurvivorArray.msg (message-only)
+│   ├── nidar_config/              # SINGLE SOURCE OF TRUTH: mission_config.yaml, arena_grid.yaml,
+│   │                              #   flight_envelope_guard.yaml + apply_mission_config.py generator
+│   ├── nidar_sim/                 # SIM ONLY: worlds/nidar_competition.world, models/ (arena, pad,
+│   │                              #   tfmini, VLP-16), launch/nidar_sim.launch (Gazebo + PX4 + MAVROS)
+│   ├── nidar_platform/            # relay_odometry.py (FAST-LIO -> EKF2), build_px4.sh
+│   ├── nidar_slam/                # nidar_mapping.launch, FAST-LIO config, URDF, RViz profile
+│   ├── nidar_planner/             # nidar_fuel_upstream.launch (FUEL + traj_server)
+│   ├── nidar_safety/              # flight_envelope_guard.py (setpoint validation)
+│   ├── nidar_mission/             # mission_manager.py (node: entry_detection_module), coverage
+│   │                              #   reporter, telemetry logger
+│   ├── nidar_perception/          # camera TF chain, survivor_detector.py, detection model weights
+│   ├── nidar_map2d/               # /map_2d slicer, grid overlay + survivor tags, view_map2d.sh
+│   ├── nidar_qa/                  # verify_fix_parity.sh (pre-flight gate), analyze_exploration.py
+│   ├── nidar_bringup/             # test_takeoff.sh orchestrator, mission_only.launch, cpu_repin_loop.sh
+│   ├── FAST_LIO/                  # LiDAR-inertial SLAM; publishes /Fast_LIO/odometry
+│   ├── fuel/                      # FUEL exploration planner (+ uav_simulator/Utils/quadrotor_msgs)
 │   ├── ikd-Tree/                  # Incremental k-d tree used by FAST-LIO
 │   ├── livox_ros_driver/          # Livox LiDAR ROS driver
-│   ├── velodyne_simulator/        # Gazebo VLP-16 plugin + meshes
-│   └── PX4-Autopilot/             # NOT firmware: 12-file shim carrying velodyne_vlp16 meshes for rospack
-├── config/
-│   ├── fast_lio/nidar_sim.yaml    # FAST-LIO tuning
-│   ├── iris_vlp16.urdf            # robot_description for TF
-│   ├── nidar_lidar.rviz           # RViz profile (only loaded when RVIZ=1)
-│   └── flight_envelope_guard.yaml # Safety envelope: XY bounds, Z band, range/vision watchdogs
-├── launch/
-│   ├── fast_lio/nidar_mapping.launch
-│   └── nidar_fuel_upstream.launch # FUEL stack + traj_server + waypoint_generator
-├── scripts/                       # 8 live scripts, all reachable from test_takeoff.sh
-│   ├── test_takeoff.sh            # End-to-end mission entry point (GUI arg; RVIZ=1 for RViz)
-│   ├── setup_env.sh               # ROS/Gazebo/PX4 env + model & plugin paths
-│   ├── relay_odometry.py          # /Fast_LIO/odometry -> /mavros/vision_pose/pose
-│   ├── flight_envelope_guard.py   # /planning/pos_cmd -> MAVROS setpoints + safety envelope
-│   ├── cpu_repin_loop.sh          # Re-pins worker threads spawned after initial affinity set
-│   ├── mission_telemetry_logger.py
-│   ├── docker_dev_start.sh
-│   └── build_px4.sh
+│   └── velodyne_simulator/        # Gazebo VLP-16 plugin + meshes
 ├── simulation/
-│   ├── custom_models/
-│   │   ├── arina_nidar/           # ACTIVE arena mesh loaded by nidar_competition.world
-│   │   ├── launch_pad/            # Spawn + return pad at world (0, -9.5)
-│   │   ├── iris_vlp16/            # Legacy airframe, superseded by x500_vlp16; not spawned
-│   │   ├── tfmini_lidar/          # Downward TFmini rangefinder (fixed-altitude 2D flight)
-│   │   ├── velodyne_vlp16/
-│   │   └── nidar_arena/           # Previous arena, kept for regression runs
-│   └── PX4-Autopilot-v1.14.3/     # Vendored PX4 firmware (96% of tracked files; see cleanup plan Sec 4.4)
+│   ├── *.STL                      # CAD sources for the arena, pad, camera and TFmini meshes
+│   └── PX4-Autopilot-v1.14.3/     # Vendored PX4, trimmed to the posix SITL + gazebo-classic x500_vlp16
 │       └── .../models/x500_vlp16/x500_vlp16.sdf   # <- the model Gazebo ACTUALLY spawns
 └── PLANNING_DOCS/                 # Active engineering plans; archive/ holds resolved ones
 ```
 
 ## Key Technical Profiles
 * **EKF External Vision Fusion:** PX4 ROMFS defaults are hard-coded (`EKF2_EV_CTRL = 11`) to enable robust GPS-denied state estimation driven by `/Fast_LIO/odometry`, with `EKF2_BARO_CTRL = 1` fusing barometric height as a cross-check.
-* **Exploration Safety Bounds:** Maximum exploration velocity is capped at **$0.6\text{ m/s}$** (`max_vel` in `launch/nidar_fuel_upstream.launch`), with safety clearances optimized for narrow indoor corridors and warehouse obstacles.
+* **Exploration Safety Bounds:** Maximum exploration velocity is capped at **$0.6\text{ m/s}$** (`max_vel` in `catkin_ws/src/nidar_planner/launch/nidar_fuel_upstream.launch`, rendered from `nidar_config`), with safety clearances optimized for narrow indoor corridors and warehouse obstacles.
 
 ---
 
@@ -154,12 +150,12 @@ NIDAR/
   ```
 * **Auto-Healing:** `./scripts/setup_env.sh` automatically detects if `catkin_ws/devel/setup.bash` is missing and triggers `catkin build` to repair workspace linking.
 
-### `Makefile:39: *** YOU HAVE TO USE GIT TO DOWNLOAD THIS REPOSITORY. ABORTING.` (during `./scripts/build_px4.sh`)
+### `Makefile:39: *** YOU HAVE TO USE GIT TO DOWNLOAD THIS REPOSITORY. ABORTING.` (during `build_px4.sh`)
 * **Cause:** `simulation/PX4-Autopilot-v1.14.3` is vendored into this repository as plain files rather than
   a git submodule, so a fresh clone has no `.git` there — but PX4's own build system requires one (both at
   its root, and inside a couple of nested paths its version-header generator checks, e.g.
   `src/modules/mavlink/mavlink`).
-* **Auto-Healing:** `./scripts/build_px4.sh` automatically detects and bootstraps a minimal, self-contained
+* **Auto-Healing:** `catkin_ws/src/nidar_platform/scripts/build_px4.sh` automatically detects and bootstraps a minimal, self-contained
   local git repo in each place PX4's build tooling needs one — no action required, this runs automatically
   on every invocation and is a no-op once already bootstrapped.
 

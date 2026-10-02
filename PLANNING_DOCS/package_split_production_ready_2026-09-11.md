@@ -1,7 +1,14 @@
 # NIDAR AirMouse — Package Split for a Production-Ready Repo
 
 **Date:** 2026-09-11
-**Status:** design doc, no code changes yet
+**Status:** mechanical split IMPLEMENTED 2026-10-02 on branch `refactor/package-split` (steps 1-12;
+`nidar_bringup/README.md` has the resulting layout and bring-up order). Deliberately deferred to follow-up
+PRs, per §8 "do not change interface contracts during the split": `MissionStatus`/`CoverageReport` msgs,
+`AbortMission`/`ReturnHome` srvs, `nidar_gcs`, `preflight_check.py`, `ci_smoke.sh`, `run_acceptance.py`,
+`nidar_full_hardware.launch`, guard unit tests, the §5.1 CI graph check. Deviations from the plan: the PX4
+tree stays at `simulation/PX4-Autopilot-v1.14.3` (nidar_platform points at it), and `test_takeoff.sh` stays a
+script (moved into nidar_bringup, root wrapper kept) because its arm/OFFBOARD/pinning sequencing cannot be
+expressed as a launch file.
 **Audience:** anyone about to add a subsystem to this repo and wondering "which package does it belong in"
 
 ---
