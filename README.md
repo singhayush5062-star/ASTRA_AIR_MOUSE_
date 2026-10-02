@@ -86,6 +86,16 @@ source devel/setup.bash && cd ~/NIDAR
 ./scripts/test_takeoff.sh true
 ```
 
+### Run it from the web GCS instead
+
+```bash
+catkin_ws/src/nidar_gcs/scripts/setup_gcs.sh   # once per machine: backend deps, Node, UI build
+catkin_ws/src/nidar_gcs/scripts/start_gcs.sh   # then open http://localhost:8000 -> SIMULATION -> START
+```
+
+START/PAUSE/RESET drive the same orchestrator; telemetry, mission phase, live 2D map, camera with
+detections, survivors and health are live in the UI. See `catkin_ws/src/nidar_gcs/README.md`.
+
 ---
 
 ## Repository Structure
@@ -119,7 +129,9 @@ NIDAR/
 │   ├── nidar_perception/          # camera TF chain, survivor_detector.py, detection model weights
 │   ├── nidar_map2d/               # /map_2d slicer, grid overlay + survivor tags, view_map2d.sh
 │   ├── nidar_qa/                  # verify_fix_parity.sh (pre-flight gate), analyze_exploration.py
-│   ├── nidar_bringup/             # test_takeoff.sh orchestrator, mission_only.launch, cpu_repin_loop.sh
+│   ├── nidar_bringup/             # test_takeoff.sh orchestrator, stop_sim.sh, mission_only.launch,
+│   │                              #   cpu_repin_loop.sh
+│   ├── nidar_gcs/                 # web GCS: React UI + FastAPI backend + ROS bridge (start_gcs.sh)
 │   ├── FAST_LIO/                  # LiDAR-inertial SLAM; publishes /Fast_LIO/odometry
 │   ├── fuel/                      # FUEL exploration planner (+ uav_simulator/Utils/quadrotor_msgs)
 │   ├── ikd-Tree/                  # Incremental k-d tree used by FAST-LIO

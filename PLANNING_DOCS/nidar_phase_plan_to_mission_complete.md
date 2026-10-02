@@ -621,6 +621,18 @@ visible score.
 **Exit criterion:** a single operator, on one laptop, with no internet, sees everything brief §5
 enumerates, and can trigger exactly two actions: start and abort.
 
+> **Status 2026-10-02 — simulation side built.** The team's own web UI replaces Foxglove (§6.1):
+> `catkin_ws/src/nidar_gcs` (README there). In simulation it starts / pauses / resets the run and
+> shows: live telemetry and mission phase; the mission clock (sim time since arming); the live 2D
+> map (`/map_2d`, now built from the LiDAR by `nidar_map2d/lidar_map_2d.py`: walls + explored
+> floor, A1–G7 grid, drone and flown path, survivors as hotspots with their grid box highlighted);
+> a survivors list with grid box and position; the camera with detector boxes; subsystem health; an
+> event timeline; and a two-press EMERGENCY ABORT (PX4 AUTO.LAND). Fonts are bundled, so it works
+> offline (brief §7). Verified with flights driven from the browser; map scored against the arena
+> mesh with `nidar_qa/scripts/map_accuracy.py`. Not done yet: room/corridor labelling (§5.2), the
+> 30-minute clock / coverage progress, link-loss and recall failsafes (§2.4), the Hardware page's
+> real link (§6.2), the bandwidth assertion (§6.2) and the setup-time test (§6.3).
+
 ### 6.1 Stack
 
 Recommend **Foxglove Studio** (self-hosted, offline-capable) over custom web UI, with a saved layout

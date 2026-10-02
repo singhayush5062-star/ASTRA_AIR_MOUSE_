@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Play, Pause, RotateCcw, FastForward, Layers, Monitor,
+  ChevronLeft, Play, Pause, RotateCcw, FastForward, Layers, Monitor, ShieldAlert,
 } from 'lucide-react';
 import { useSimulationStore } from '@/store';
-import { useSimulationMockProvider } from '@/hooks/useMockProviders';
-import { Sim3DView } from '@/components/simulation/Sim3DView';
+import { useSimulationBackend, SIM_API_BASE } from '@/hooks/useSimulationBackend';
+import { SimulationProvider } from '@/providers/SimulationProvider';
+import { OccupancyGridMap } from '@/components/map/OccupancyGridMap';
 import { CameraView } from '@/components/camera/CameraView';
 import {
   SystemHealthRow, TelemetryValue, PanelHeader,
@@ -13,31 +14,50 @@ import {
 } from '@/components/shared';
 import { ResizeDivider } from '@/components/shared/ResizeDivider';
 import { useResizableLayout } from '@/hooks/useResizableLayout';
-import type { DroneState } from '@/types';
 
 // ─── Simulation Controls ──────────────────────────────────────
 
 const SCENARIOS = ['scenario_01', 'scenario_02', 'scenario_03', 'scenario_04'];
 
+// START / PAUSE / RESET go to the GCS backend, which runs the real simulation
+// (scripts/test_takeoff.sh), pauses Gazebo physics, or stops every simulation process.
+const simProvider = new SimulationProvider(SIM_API_BASE);
+
 function SimControls() {
   const scenario    = useSimulationStore(s => s.simConfig.scenario);
   const simState    = useSimulationStore(s => s.simConfig.state);
   const setSimConfig = useSimulationStore(s => s.setSimConfig);
-  const addEvent    = useSimulationStore(s => s.addEvent);
 
   const [speed, setSpeed] = useState(1);
 
-  const handleStart = () => {
-    setSimConfig({ state: 'RUNNING' });
-    addEvent({ id: `e-${Date.now()}`, timestamp: Date.now(), message: 'SIMULATION STARTED', level: 'SUCCESS' });
-  };
-  const handlePause = () => {
-    setSimConfig({ state: 'PAUSED' });
-    addEvent({ id: `e-${Date.now()}`, timestamp: Date.now(), message: 'SIMULATION PAUSED', level: 'WARN' });
-  };
-  const handleReset = () => {
-    setSimConfig({ state: 'STOPPED' });
-    addEvent({ id: `e-${Date.now()}`, timestamp: Date.now(), message: 'SIMULATION RESET', level: 'WARN' });
+  const handleStart = () => { void simProvider.sendSimControl('start', { scenario }); };
+  const handlePause = () => { void simProvider.sendSimControl('pause'); };
+  const handleReset = () => { void simProvider.sendSimControl('reset'); };
+
+  // Emergency abort (brief §4, §10): same two-press confirm as the Hardware page's button.
+  // Confirmed abort commands PX4 AUTO.LAND through the backend.
+  const missionState = useSimulationStore(s => s.missionState);
+  const [abortArmed, setAbortArmed] = useState(false);
+  const [abortCountdown, setAbortCountdown] = useState(0);
+  const abortTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const aborted = missionState === 'ABORT';
+  const handleAbortPress = () => {
+    if (aborted) return;
+    if (!abortArmed) {
+      setAbortArmed(true);
+      setAbortCountdown(3);
+      const interval = setInterval(() => {
+        setAbortCountdown(c => {
+          if (c <= 1) { clearInterval(interval); setAbortArmed(false); return 0; }
+          return c - 1;
+        });
+      }, 1000);
+      abortTimerRef.current = setTimeout(() => setAbortArmed(false), 3500);
+      return;
+    }
+    clearTimeout(abortTimerRef.current);
+    setAbortArmed(false);
+    void simProvider.triggerAbort();
   };
   const cycleSpeed = () => {
     const speeds = [0.5, 1, 2, 4];
@@ -97,6 +117,20 @@ function SimControls() {
         >
           <RotateCcw size={9} />RESET
         </button>
+        <button
+          onClick={handleAbortPress}
+          disabled={aborted || simState === 'STOPPED'}
+          className={`${btnBase} font-bold ${aborted || simState === 'STOPPED' ? 'opacity-30 cursor-not-allowed' : ''}`}
+          style={abortArmed ? {
+            background: '#FF003C', borderColor: '#FF003C', color: '#09090B', marginLeft: 12,
+            boxShadow: '0 0 20px rgba(255,0,60,0.6)',
+          } : {
+            background: '#110007', borderColor: '#FF003C', color: '#FF003C', marginLeft: 12,
+          }}
+        >
+          <ShieldAlert size={10} />
+          {aborted ? 'ABORT ACTIVE' : abortArmed ? `CONFIRM ABORT (${abortCountdown})` : 'EMERGENCY ABORT'}
+        </button>
       </div>
 
       <div className="flex items-center gap-2 px-3 py-1.5 border-l text-[9px] font-mono" style={{ borderColor: '#27272A' }}>
@@ -131,6 +165,7 @@ function SimTelemetry() {
   const health        = useSimulationStore(s => s.health);
   const autonomy      = useSimulationStore(s => s.autonomy);
   const scenario      = useSimulationStore(s => s.simConfig.scenario);
+  const survivors     = useSimulationStore(s => s.survivors);
 
   const mins = Math.floor(missionTimer / 60).toString().padStart(2, '0');
   const secs = (missionTimer % 60).toString().padStart(2, '0');
@@ -147,6 +182,61 @@ function SimTelemetry() {
         <div className="px-3 pb-3">
           <MissionStateTracker phases={missionPhases} current={missionState} />
         </div>
+      </div>
+
+      {/* Survivors — grid box and position of every tagged survivor (brief §1, §6).
+          Entry styling is the Hardware page's SurvivorPanel. */}
+      <div style={{ borderBottom: '1px solid #27272A' }}>
+        <PanelHeader
+          title="SURVIVORS"
+          accent="#00FF41"
+          right={
+            <div className="flex items-center gap-1 text-[10px] font-mono" style={{ color: '#00FF41' }}>
+              <span className="font-bold">{String(survivors.length).padStart(2, '0')}</span>
+              <span className="text-muted"> / 06</span>
+            </div>
+          }
+        />
+        {survivors.length === 0 ? (
+          <div className="flex items-center justify-center h-12 text-[10px] font-mono text-disabled uppercase tracking-wider">
+            NO SURVIVORS DETECTED
+          </div>
+        ) : (
+          survivors.map(s => {
+            const confColor = s.confidence >= 90 ? '#00FF41' : s.confidence >= 70 ? '#FFB000' : '#FF5500';
+            return (
+              <div key={s.id} className="px-3 py-2 border-b" style={{ borderColor: '#1c1c1e' }}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-mono font-bold tracking-wider" style={{ color: '#00FF41' }}>
+                    SURVIVOR #{String(s.id).padStart(2, '0')}
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5"
+                    style={{ background: 'rgba(0,255,65,0.1)', color: '#00FF41', border: '1px solid rgba(0,255,65,0.3)' }}>
+                    {s.status}
+                  </span>
+                </div>
+                <div className="flex gap-4">
+                  <div>
+                    <div className="text-[8px] font-mono text-disabled uppercase tracking-wider">GRID</div>
+                    <div className="text-[11px] font-mono font-bold" style={{ color: '#00F0FF' }}>{s.gridLabel}</div>
+                  </div>
+                  <div>
+                    <div className="text-[8px] font-mono text-disabled uppercase tracking-wider">CONF</div>
+                    <div className="text-[11px] font-mono font-bold" style={{ color: confColor }}>
+                      {s.confidence.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-1 text-[8px] font-mono text-disabled">
+                  X:{s.position.x !== null ? s.position.x.toFixed(2) : '--'} Y:{s.position.y !== null ? s.position.y.toFixed(2) : '--'} Z:{s.position.z !== null ? s.position.z.toFixed(2) : '--'}
+                </div>
+                <div className="mt-1.5 h-1 w-full rounded-sm overflow-hidden" style={{ background: '#27272A' }}>
+                  <div className="h-full" style={{ width: `${s.confidence}%`, background: confColor }} />
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Position */}
@@ -287,45 +377,19 @@ function SimTopBar({ onResetLayout }: SimTopBarProps) {
   );
 }
 
-// ─── Stable drone snapshot for canvas (read-only, not reactive) ─
-
-function useDroneSnapshot(): DroneState {
-  // Use separate primitive selectors for the canvas view — these are batched
-  const x     = useSimulationStore(s => s.drone.position.x);
-  const y     = useSimulationStore(s => s.drone.position.y);
-  const z     = useSimulationStore(s => s.drone.position.z);
-  const vx    = useSimulationStore(s => s.drone.velocity.x);
-  const vy    = useSimulationStore(s => s.drone.velocity.y);
-  const vz    = useSimulationStore(s => s.drone.velocity.z);
-  const roll  = useSimulationStore(s => s.drone.attitude.roll);
-  const pitch = useSimulationStore(s => s.drone.attitude.pitch);
-  const yaw   = useSimulationStore(s => s.drone.attitude.yaw);
-  const batV  = useSimulationStore(s => s.drone.battery.voltage);
-  const batA  = useSimulationStore(s => s.drone.battery.current);
-  const batP  = useSimulationStore(s => s.drone.battery.percentage);
-  const mode  = useSimulationStore(s => s.drone.mode);
-  const cs    = useSimulationStore(s => s.drone.connectionStatus);
-
-  return useMemo(() => ({
-    id: 'NIDAR-01', mode, connectionStatus: cs, timestamp: Date.now(),
-    position: { x, y, z },
-    velocity: { x: vx, y: vy, z: vz },
-    attitude: { roll, pitch, yaw },
-    battery:  { voltage: batV, current: batA, percentage: batP },
-  }), [x, y, z, vx, vy, vz, roll, pitch, yaw, batV, batA, batP, mode, cs]);
-}
-
 // ─── Simulation Dashboard ─────────────────────────────────────
 
 export default function SimulationDashboard() {
-  useSimulationMockProvider();
+  useSimulationBackend();
 
-  const drone   = useDroneSnapshot();
-  const events  = useSimulationStore(s => s.events);
-
-  const trajX = useSimulationStore(s => s.drone.position.x);
-  const trajY = useSimulationStore(s => s.drone.position.y);
-  const trajectory = useMemo(() => (trajX !== null && trajY !== null ? [{ x: trajX, y: trajY }] : []), [trajX, trajY]);
+  const events     = useSimulationStore(s => s.events);
+  const map        = useSimulationStore(s => s.map);
+  const trajectory = useSimulationStore(s => s.trajectory);
+  const survivors  = useSimulationStore(s => s.survivors);
+  const arena      = useSimulationStore(s => s.arena);
+  const droneX     = useSimulationStore(s => s.drone.position.x);
+  const droneY     = useSimulationStore(s => s.drone.position.y);
+  const droneYaw   = useSimulationStore(s => s.drone.attitude.yaw);
 
   // VS Code style resizable layout for Simulation
   const {
@@ -362,7 +426,7 @@ export default function SimulationDashboard() {
       <div className="flex flex-1 overflow-hidden select-none" style={{ minHeight: 0 }}>
         {/* LEFT: 3D view + camera */}
         <div className="flex flex-col flex-1 overflow-hidden" style={{ minWidth: 0 }}>
-          {/* 3D Simulation View */}
+          {/* Live 2D map (brief §1, §5): the team's 2D map component, fed from the simulation */}
           <div className="flex-1 relative overflow-hidden"
             style={{ border: '1px solid #27272A', borderTop: 'none', borderLeft: 'none', minHeight: '120px' }}>
             <div
@@ -371,10 +435,22 @@ export default function SimulationDashboard() {
             >
               <Layers size={9} color="#00F0FF" />
               <span className="text-[9px] font-mono tracking-[0.18em] uppercase text-muted">
-                3D SIMULATION VIEW  —  GAZEBO + PX4 SITL  —  SCENARIO_01
+                LOCAL 2D OCCUPANCY GRID  —  FAST-LIO2  —  GAZEBO + PX4 SITL
               </span>
             </div>
-            <Sim3DView drone={drone} trajectory={trajectory} className="w-full h-full" />
+            <OccupancyGridMap
+              map={map}
+              droneX={droneX}
+              droneY={droneY}
+              droneYaw={droneYaw}
+              trajectory={trajectory}
+              survivors={survivors}
+              grid={arena?.grid ?? null}
+              startPoint={arena?.entry}
+              startLabel="ENTRY / EXIT"
+              emptyHint="Live 2D map appears once the simulation is running. Press START."
+              className="w-full h-full"
+            />
           </div>
 
           {/* Draggable Horizontal Divider */}

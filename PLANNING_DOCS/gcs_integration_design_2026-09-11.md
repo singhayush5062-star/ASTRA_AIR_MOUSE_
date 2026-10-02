@@ -2,6 +2,13 @@
 
 **Author:** Ayush Singh (with implementation notes from the 2026-09-11 session)
 **Status:** design; nothing here is implemented yet
+
+> **Superseded in part (2026-10-02).** The team built its own operator UI (React + FastAPI,
+> `P07awan/Airmouse`), so the Foxglove Studio display, layout file and button extension in this
+> document are not used. That UI is integrated with the simulation as
+> `catkin_ws/src/nidar_gcs` (see its README): a ROS bridge node feeds the backend instead of
+> rosbridge, and the UI is served on http://localhost:8000. The topic inventory and the
+> no-external-network reasoning below still apply.
 **Sits above:** Phase 4 (survivor detection, done in the same session)
 **Sits below:** Phase 5–7 of `PLANNING_DOCS/nidar_phase_plan_to_mission_complete.md`
 **Competition sections it satisfies:** Mission Brief §1 (overall objective — GCS

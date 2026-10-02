@@ -12,7 +12,7 @@ type MessageHandler = (data: unknown) => void;
 
 // ─── WebSocket Manager ───────────────────────────────────────
 
-class ManagedWebSocket {
+export class ManagedWebSocket {
   private ws: WebSocket | null = null;
   private handlers: MessageHandler[] = [];
   private reconnectDelay = 500;

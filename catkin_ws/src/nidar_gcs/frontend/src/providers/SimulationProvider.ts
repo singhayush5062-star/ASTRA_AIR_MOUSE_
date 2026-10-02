@@ -62,8 +62,19 @@ export class SimulationProvider
     });
   }
 
+  /** Operator emergency abort: the backend commands PX4 AUTO.LAND (land in place now). */
   async triggerAbort(): Promise<void> {
-    useSimulationStore.getState().setMissionState('ABORT');
+    const store = useSimulationStore.getState();
+    store.setMissionState('ABORT');
+    try {
+      const res = await fetch(`${this.baseUrl}/api/mission/abort`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      store.addEvent({
+        id: `ui-${Date.now()}`, timestamp: Date.now(), level: 'ERROR',
+        message: 'ABORT NOT DELIVERED — GCS BACKEND UNREACHABLE',
+      });
+    }
   }
 
   getSurvivors(): Survivor[] {
@@ -86,24 +97,36 @@ export class SimulationProvider
     return useSimulationStore.subscribe((s) => callback(s.health));
   }
 
+  /**
+   * Start / pause / reset the real simulation through the GCS backend. The backend owns the
+   * simulation state: the store shows the transitional state (STARTING, RESETTING) until the
+   * next telemetry message reports what actually happened.
+   */
   async sendSimControl(action: 'start' | 'pause' | 'reset', extra?: Partial<SimulationConfig>): Promise<void> {
     const store = useSimulationStore.getState();
+    const previous = store.simConfig.state;
     if (action === 'start') {
-      store.setSimConfig({ state: 'RUNNING', ...extra });
-    } else if (action === 'pause') {
-      store.setSimConfig({ state: 'PAUSED', ...extra });
+      store.setSimConfig({ state: previous === 'PAUSED' ? 'RUNNING' : 'STARTING', ...extra });
     } else if (action === 'reset') {
-      store.setSimConfig({ state: 'STOPPED', ...extra });
+      store.setSimConfig({ state: 'RESETTING', ...extra });
+    } else if (extra) {
+      store.setSimConfig(extra);
     }
 
     try {
-      await fetch(`${this.baseUrl}/api/simulation/control`, {
+      const res = await fetch(`${this.baseUrl}/api/simulation/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...extra }),
       });
+      const data = await res.json().catch(() => null);
+      if (data && data.sim_state) store.setSimConfig({ state: data.sim_state });
     } catch {
-      // Backend offline fallback handled locally
+      store.setSimConfig({ state: previous });
+      store.addEvent({
+        id: `ui-${Date.now()}`, timestamp: Date.now(), level: 'ERROR',
+        message: `GCS BACKEND UNREACHABLE — ${action.toUpperCase()} NOT SENT`,
+      });
     }
   }
 }

@@ -17,8 +17,10 @@ from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
+
+from app.core.config import settings
 
 from app.models.telemetry import (
     DroneState, MissionState, SystemHealth, SubsystemHealth, SubsystemStatus,
@@ -28,11 +30,16 @@ from app.models.mission import MissionEvent, MissionInfo, AutonomyInfo
 from app.models.survivor import Survivor
 from app.models.map import MapMetadata
 from app.services.mock_provider import MockDataProvider
+from app.services.sim_service import SimulationService
 from app.services.vision_service import vision_service
 
 # ─── State & Providers ──────────────────────────────────────
 
-sim_provider = MockDataProvider()
+# The Simulation dashboard is backed by the real NIDAR simulation (Gazebo + PX4 SITL + the ROS
+# stack) through SimulationService. GCS_MOCK=1 restores the original synthetic data source for
+# UI work on a machine without ROS.
+MOCK = settings.GCS_MOCK
+sim_provider = MockDataProvider() if MOCK else SimulationService()
 hardware_connected = False
 hardware_error: str | null = None
 connected_drone_config: dict[str, Any] = {
@@ -171,6 +178,10 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         pass
+    # Stop only the ROS bridge. A running simulation is deliberately left up: restarting the
+    # GCS must not crash a flight, and the next GCS instance re-attaches to it.
+    if not MOCK:
+        await sim_provider.link.stop()
 
 
 # ─── App Setup ───────────────────────────────────────────────
@@ -337,8 +348,24 @@ async def get_simulation_status() -> dict[str, Any]:
 @app.post("/api/simulation/control")
 async def simulation_control(body: dict[str, Any]) -> dict[str, Any]:
     action = body.get("action", "")
-    sim_provider.handle_sim_command(action, body)
-    return {"status": "OK", "action": action, "timestamp": time.time()}
+    if MOCK:
+        sim_provider.handle_sim_command(action, body)
+        result: dict[str, Any] = {"ok": True}
+    else:
+        result = await sim_provider.handle_sim_command(action, body)
+    return {"status": "OK" if result.get("ok") else "REJECTED", "action": action,
+            "result": result, "sim_state": sim_provider.get_state().get("sim_state"),
+            "timestamp": time.time()}
+
+
+@app.get("/api/simulation/arena")
+async def simulation_arena() -> dict[str, Any]:
+    """Arena geometry the 3D view needs (bounds, entry door, launch pad, scenarios)."""
+    if MOCK:
+        return {"name": "mock", "bounds": {"x_min": -7.5, "x_max": 7.5, "y_min": -7.5, "y_max": 7.5},
+                "entry": {"x": 0.0, "y": -7.2}, "launch_pad": {"x": 0.0, "y": -9.5},
+                "scenarios": {"scenario_01": "mock"}}
+    return sim_provider.arena_info
 
 
 # ─── Mission Routes (/api/mission/*) ─────────────────────────
@@ -350,6 +377,7 @@ async def get_mission() -> dict[str, Any]:
     return {
         "state": state["mission_state"],
         "timer": state["mission_timer"],
+        "phases": state.get("mission_phases"),
         "autonomy": state["autonomy"].model_dump(),
         "timestamp": time.time(),
     }
@@ -375,11 +403,16 @@ async def get_survivors() -> dict[str, Any]:
 
 @app.get("/api/map")
 async def get_map() -> dict[str, Any]:
-    return {
-        "meta": {"width": 80, "height": 80, "resolution": 0.2, "originX": -8.0, "originY": -8.0},
-        "data": sim_provider.get_map_data(),
-        "timestamp": time.time(),
-    }
+    if MOCK:
+        return {
+            "meta": {"width": 80, "height": 80, "resolution": 0.2, "originX": -8.0, "originY": -8.0},
+            "data": sim_provider.get_map_data(),
+            "timestamp": time.time(),
+        }
+    m = sim_provider.get_map()
+    if m is None:
+        return {"meta": None, "data": [], "timestamp": time.time() * 1000.0}
+    return m
 
 
 # ─── WebSocket Connection Manager ────────────────────────────
@@ -420,6 +453,11 @@ manager = ConnectionManager()
 
 # ─── WebSocket Endpoints ─────────────────────────────────────
 
+# Channels that only send on change (events, map) also send a small ping this often: a closed
+# client is only noticed when a write fails, and without it a handler for a closed tab would
+# loop until the next event (forever, after a reset) and block server shutdown.
+WS_HEARTBEAT_S = 2.0
+
 @app.websocket("/api/ws/simulation")
 @app.websocket("/api/ws/telemetry")
 async def ws_simulation(ws: WebSocket):
@@ -434,11 +472,21 @@ async def ws_simulation(ws: WebSocket):
                     "drone": state["drone"].model_dump(),
                     "mission_state": state["mission_state"],
                     "mission_timer": state["mission_timer"],
+                    "mission_phases": state.get("mission_phases"),
                     "health": {k: v.model_dump() for k, v in state["health"].items()},
+                    "autonomy": state["autonomy"].model_dump(),
+                    "survivors": [s.model_dump() for s in state["survivors"]],
+                    "sim": {
+                        "state": state.get("sim_state", "STOPPED"),
+                        "scenario": state.get("scenario"),
+                        "gazeboConnected": state.get("gazebo_connected", False),
+                        "px4SitlConnected": state.get("px4_sitl_connected", False),
+                        "ros2Connected": state.get("ros2_connected", False),
+                    },
                 },
                 "timestamp": time.time(),
             })
-            await asyncio.sleep(0.05)  # 20 Hz
+            await asyncio.sleep(0.1)  # 10 Hz: the bridge snapshots the stack at 10 Hz
     except WebSocketDisconnect:
         manager.disconnect(ws, "simulation")
 
@@ -495,16 +543,32 @@ async def ws_hardware(ws: WebSocket):
 async def ws_map(ws: WebSocket):
     await manager.connect(ws, "map")
     try:
+        last_sent = None
+        last_write = time.time()
         while True:
-            await ws.send_json({
-                "type": "map",
-                "payload": {
-                    "meta": {"width": 80, "height": 80, "resolution": 0.2, "originX": -8.0, "originY": -8.0},
-                    "data": sim_provider.get_map_data(),
-                },
-                "timestamp": time.time(),
-            })
-            await asyncio.sleep(0.2)  # 5 Hz
+            if MOCK:
+                await ws.send_json({
+                    "type": "map",
+                    "payload": {
+                        "meta": {"width": 80, "height": 80, "resolution": 0.2, "originX": -8.0, "originY": -8.0},
+                        "data": sim_provider.get_map_data(),
+                    },
+                    "timestamp": time.time(),
+                })
+                await asyncio.sleep(0.2)  # 5 Hz
+                continue
+            m = sim_provider.get_map()
+            stamp = None if m is None else m["timestamp"]
+            if stamp != last_sent:
+                # /map_2d is published at 2 Hz and forwarded at most at 1 Hz; send only changes.
+                # A null payload tells the UI the run's map is gone (simulation reset).
+                last_sent = stamp
+                last_write = time.time()
+                await ws.send_json({"type": "map", "payload": m, "timestamp": time.time()})
+            elif time.time() - last_write > WS_HEARTBEAT_S:
+                last_write = time.time()
+                await ws.send_json({"type": "ping", "timestamp": time.time()})
+            await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         manager.disconnect(ws, "map")
 
@@ -513,8 +577,23 @@ async def ws_map(ws: WebSocket):
 async def ws_events(ws: WebSocket):
     await manager.connect(ws, "events")
     last_event_count = 0
+    last_seq = 0
+    last_write = time.time()
     try:
         while True:
+            if not MOCK:
+                # Sequence-numbered: a (re)connecting client gets the backlog once, oldest
+                # first, then only new events.
+                for evt in sim_provider.events_since(last_seq):
+                    last_seq = int(evt.id.split("-")[1])
+                    last_write = time.time()
+                    await ws.send_json({"type": "event", "payload": evt.model_dump(),
+                                        "timestamp": time.time()})
+                if time.time() - last_write > WS_HEARTBEAT_S:
+                    last_write = time.time()
+                    await ws.send_json({"type": "ping", "timestamp": time.time()})
+                await asyncio.sleep(0.1)
+                continue
             state = sim_provider.get_state()
             events = state["events"]
             if len(events) != last_event_count:
@@ -579,7 +658,13 @@ async def ws_camera(ws: WebSocket):
 
 @app.get("/api/camera/stream")
 async def get_camera_stream():
-    """Live MJPEG video stream from FC/Jetson with laptop-side YOLO26s annotations."""
+    """Live MJPEG video stream from FC/Jetson with laptop-side YOLO26s annotations.
+
+    While a simulation is running, this is the simulated drone camera instead, annotated with
+    the onboard detector's boxes (nidar_perception)."""
+    if not MOCK and sim_provider.camera_live():
+        return StreamingResponse(sim_provider.mjpeg(),
+                                 media_type="multipart/x-mixed-replace; boundary=frame")
     if not vision_service.is_running or (not vision_service.receiving_frames and vision_service.latest_annotated_jpeg is None):
         return JSONResponse(
             status_code=503,
@@ -600,7 +685,10 @@ async def get_camera_stream():
 
 @app.get("/api/camera/status")
 async def get_camera_status() -> dict[str, Any]:
-    """Status metrics of the FC/Jetson camera link and Laptop YOLO model."""
+    """Status metrics of the FC/Jetson camera link and Laptop YOLO model (or of the simulated
+    camera and the onboard detector while a simulation is running)."""
+    if not MOCK and sim_provider.camera_live():
+        return sim_provider.camera_status()
     return vision_service.get_status()
 
 
@@ -625,3 +713,21 @@ async def control_camera(body: dict[str, Any]) -> dict[str, Any]:
         vision_service.stop_camera()
     return vision_service.get_status()
 
+
+
+# ─── Web UI (built frontend) ─────────────────────────────────
+# scripts/setup_gcs.sh builds the React app into frontend/dist; serving it from here means one
+# process and one port (http://localhost:8000) for the whole GCS. Registered last so every /api
+# route above wins; unknown paths fall back to index.html for the client-side router.
+
+if os.path.isdir(settings.FRONTEND_DIST):
+    _DIST = os.path.realpath(settings.FRONTEND_DIST)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def web_ui(full_path: str):
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        candidate = os.path.realpath(os.path.join(_DIST, full_path))
+        if full_path and candidate.startswith(_DIST + os.sep) and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(os.path.join(_DIST, "index.html"))

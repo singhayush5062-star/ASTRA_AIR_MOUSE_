@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_gcs</name>
+  <version>0.1.0</version>
+  <description>
+    Ground Control Station for NIDAR: the team's web UI (frontend/, React) and its backend
+    (backend/, FastAPI), integrated with the simulation. scripts/gcs_ros_bridge.py reads the
+    running stack (MAVROS, /edm/mission_state, /map_2d, /survivors, the camera and detector)
+    and streams it to the backend; the backend starts, pauses and resets the simulation and
+    serves the UI on http://localhost:8000. Setup: scripts/setup_gcs.sh, run: scripts/start_gcs.sh.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>mavros_msgs</exec_depend>
+  <exec_depend>gazebo_msgs</exec_depend>
+  <exec_depend>nidar_msgs</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+  <exec_depend>nidar_bringup</exec_depend>
+</package>

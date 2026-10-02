@@ -1,0 +1,5 @@
+nidar_gcs
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_gcs/lib/nidar_gcs/gcs_ros_bridge.py /home/developer/NIDAR/catkin_ws/devel/lib/nidar_gcs/gcs_ros_bridge.py
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_gcs/lib/pkgconfig/nidar_gcs.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_gcs.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_gcs/share/nidar_gcs/cmake/nidar_gcsConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_gcs/cmake/nidar_gcsConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_gcs/share/nidar_gcs/cmake/nidar_gcsConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_gcs/cmake/nidar_gcsConfig-version.cmake

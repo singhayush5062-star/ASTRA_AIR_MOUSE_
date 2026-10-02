@@ -53,6 +53,24 @@ const MISSION_PHASES: MissionPhase[] = [
 
 // ─── Simulation Store ─────────────────────────────────────────
 
+/** Competition grid survivors are reported in (arena_grid.yaml): cell (0, 0) = "A1". */
+export interface ArenaGrid {
+  originX: number;
+  originY: number;
+  cellSize: number;
+  cellsX: number;
+  cellsY: number;
+}
+
+/** Arena geometry served by the backend (/api/simulation/arena), arena `world` frame, metres. */
+export interface ArenaInfo {
+  name: string;
+  bounds: { x_min: number; x_max: number; y_min: number; y_max: number };
+  entry: { x: number; y: number };
+  launch_pad: { x: number; y: number };
+  grid: ArenaGrid;
+}
+
 interface SimState {
   drone: DroneState;
   missionState: MissionState;
@@ -64,6 +82,9 @@ interface SimState {
   camera: CameraFrame;
   simConfig: SimulationConfig;
   events: MissionEvent[];
+  map: OccupancyGrid | null;
+  trajectory: TrajectoryPoint[];
+  arena: ArenaInfo | null;
   setDrone: (d: Partial<DroneState>) => void;
   setMissionState: (s: MissionState) => void;
   setHealth: (h: Partial<SystemHealth>) => void;
@@ -75,6 +96,12 @@ interface SimState {
   setMissionTimer: (t: number) => void;
   setAutonomy: (a: Partial<AutonomyInfo>) => void;
   advanceMissionPhase: () => void;
+  setMissionPhases: (p: MissionPhase[]) => void;
+  setSurvivors: (s: Survivor[]) => void;
+  setMap: (m: OccupancyGrid | null) => void;
+  addTrajectoryPoint: (p: TrajectoryPoint) => void;
+  clearTrajectory: () => void;
+  setArena: (a: ArenaInfo | null) => void;
 }
 
 export const useSimulationStore = create<SimState>()((set, get) => ({
@@ -91,6 +118,9 @@ export const useSimulationStore = create<SimState>()((set, get) => ({
   camera: { dataUrl: null, width: 640, height: 480, fps: 0, connected: false, boundingBoxes: [], timestamp: Date.now() },
   simConfig: { scenario: 'scenario_01', speed: 1, state: 'STOPPED', px4SitlConnected: false, ros2Connected: false, gazeboConnected: false },
   events: [],
+  map: null,
+  trajectory: [],
+  arena: null,
 
   setDrone: (d) => set(s => ({ drone: { ...s.drone, ...d } })),
   setMissionState: (missionState) => set({ missionState }),
@@ -116,6 +146,12 @@ export const useSimulationStore = create<SimState>()((set, get) => ({
     }
     set({ missionPhases: phases });
   },
+  setMissionPhases: (missionPhases) => set({ missionPhases }),
+  setSurvivors: (survivors) => set({ survivors }),
+  setMap: (map) => set({ map }),
+  addTrajectoryPoint: (p) => set(s => ({ trajectory: [...s.trajectory, p].slice(-3000) })),
+  clearTrajectory: () => set({ trajectory: [] }),
+  setArena: (arena) => set({ arena }),
 }));
 
 // ─── Hardware Store ────────────────────────────────────────────

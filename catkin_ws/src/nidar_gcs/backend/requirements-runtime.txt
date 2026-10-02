@@ -1,0 +1,16 @@
+# Runtime dependencies of the GCS backend, installed by scripts/setup_gcs.sh into an isolated
+# --target directory (NOT the system site-packages) so nothing here can shadow a ROS dependency.
+#
+# numpy and opencv are deliberately absent: the backend uses the system copies (the same ones
+# cv_bridge is built against). Installing a second numpy into the target dir would shadow the
+# system one inside the backend process and can break the system cv2 import.
+#
+# Versions are left to pip's resolver: it picks the newest release that still supports the
+# interpreter (Python 3.8 in the Noetic image).
+fastapi
+uvicorn[standard]
+pydantic>=2
+pydantic-settings
+python-dotenv
+pyserial
+eval_type_backport
