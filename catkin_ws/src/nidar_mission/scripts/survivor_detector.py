@@ -37,7 +37,7 @@ from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Header
 from visualization_msgs.msg import Marker, MarkerArray
 
-from nidar_mission.msg import Survivor, SurvivorArray
+from nidar_msgs.msg import Survivor, SurvivorArray
 
 
 # --- Grid helper ------------------------------------------------------------

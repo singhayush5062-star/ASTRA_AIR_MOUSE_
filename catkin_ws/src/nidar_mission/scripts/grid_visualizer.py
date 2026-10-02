@@ -33,7 +33,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 # built; fall back gracefully to no-op if the message package hasn't been
 # generated (this node still publishes the grid overlay).
 try:
-    from nidar_mission.msg import SurvivorArray
+    from nidar_msgs.msg import SurvivorArray
     _HAS_SURVIVOR_MSG = True
 except Exception:
     _HAS_SURVIVOR_MSG = False
@@ -67,7 +67,7 @@ class GridVisualizer(object):
                              queue_size=5)
             rospy.loginfo('[grid_viz] subscribing to /survivors (SurvivorArray)')
         else:
-            rospy.logwarn('[grid_viz] nidar_mission.msg.SurvivorArray not '
+            rospy.logwarn('[grid_viz] nidar_msgs.msg.SurvivorArray not '
                           'available; survivor tag publisher disabled')
 
         # Publish the static grid overlay once now and again every 5 s so any

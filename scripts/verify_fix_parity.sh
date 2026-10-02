@@ -82,7 +82,7 @@ DETECTOR=$WS/src/nidar_mission/scripts/survivor_detector.py
 COVERAGE=$WS/src/nidar_mission/scripts/coverage_reporter.py
 MAP2D=$WS/src/nidar_mission/scripts/map_2d_slicer.py
 GRIDVIZ=$WS/src/nidar_mission/scripts/grid_visualizer.py
-SURVIVOR_MSG_PY=$WS/devel/lib/python3/dist-packages/nidar_mission/msg/_Survivor.py
+SURVIVOR_MSG_PY=$WS/devel/lib/python3/dist-packages/nidar_msgs/msg/_Survivor.py
 MODEL_PT=models/detection/PERSON_DETECTION_MODEL_V3/best.pt
 # Model weights: an absent .pt turns the detector node into a FATAL, which
 # under nidar_mission.launch (required=false by default for output=screen)
@@ -132,8 +132,13 @@ chk "grid_viz: cell label"      "def _cell_label"                   "$GRIDVIZ"
 # their absence means the message-generation stage never ran (bad CMake, or
 # the workspace has not been rebuilt after adding msg files).
 if [ -f "$SURVIVOR_MSG_PY" ]; then echo "ok            Survivor.msg python in $SURVIVOR_MSG_PY"
-else echo "ABSENT        Survivor.msg python (rebuild nidar_mission)"; fail=1
+else echo "ABSENT        Survivor.msg python (rebuild nidar_msgs)"; fail=1
 fi
+# grid_visualizer.py swallows an ImportError on SurvivorArray and silently stops
+# publishing /survivor_tags, so a stale import after the nidar_msgs split would
+# look like "no survivors found" rather than a crash.
+chk "detector: nidar_msgs import"  "from nidar_msgs.msg import"    "$DETECTOR"
+chk "grid_viz: nidar_msgs import"  "from nidar_msgs.msg import"    "$GRIDVIZ"
 # Ground truth: the world file has to actually contain the survivor blocks
 # or the detector has nothing to detect. Accept either the earlier <actor>
 # variant or the current static <model> variant; both mean "at least one

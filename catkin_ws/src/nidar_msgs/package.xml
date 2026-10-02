@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_msgs</name>
+  <version>0.1.0</version>
+  <description>
+    Message definitions shared across the NIDAR AirMouse stack. Message-only: no nodes,
+    no config. Exists so a consumer of /survivors (GCS, on-vehicle bringup) does not have
+    to pull the detector and its model weights just to deserialise the topic.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+</package>

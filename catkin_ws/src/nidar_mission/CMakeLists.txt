@@ -10,23 +10,11 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   mavros_msgs
   quadrotor_msgs
-  message_generation
-)
-
-add_message_files(
-  FILES
-  Survivor.msg
-  SurvivorArray.msg
-)
-
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  geometry_msgs
+  nidar_msgs
 )
 
 catkin_package(
-  CATKIN_DEPENDS rospy std_msgs geometry_msgs nav_msgs sensor_msgs visualization_msgs mavros_msgs quadrotor_msgs message_runtime
+  CATKIN_DEPENDS rospy std_msgs geometry_msgs nav_msgs sensor_msgs visualization_msgs mavros_msgs quadrotor_msgs nidar_msgs
 )
 
 catkin_install_python(PROGRAMS
