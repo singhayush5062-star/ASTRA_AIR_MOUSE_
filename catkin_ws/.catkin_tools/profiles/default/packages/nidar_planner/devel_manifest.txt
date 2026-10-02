@@ -1,0 +1,4 @@
+nidar_planner
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_planner/lib/pkgconfig/nidar_planner.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_planner.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_planner/share/nidar_planner/cmake/nidar_plannerConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_planner/cmake/nidar_plannerConfig.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_planner/share/nidar_planner/cmake/nidar_plannerConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_planner/cmake/nidar_plannerConfig-version.cmake

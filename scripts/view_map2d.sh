@@ -105,7 +105,7 @@ if [ "${1:-}" = "--bag" ]; then
     # timestamp (bag t~0.5s), and RViz opened after that point (or in loop mode
     # between replays) never receives it. The chain must exist for the entire
     # RViz session or the OccupancyGrid display shows "Fixed Frame: No TF data"
-    # and stays black. Numbers come from launch/nidar_fuel_upstream.launch's
+    # and stays black. Numbers come from nidar_planner/launch/nidar_fuel_upstream.launch's
     # world_to_map_tf and map_to_camera_init_tf. Keep in sync if those change.
     rosrun tf2_ros static_transform_publisher 0 -9.5 0.26 1.5707963 0 0 world map \
         >/tmp/rviz_world_to_map_tf.log 2>&1 &

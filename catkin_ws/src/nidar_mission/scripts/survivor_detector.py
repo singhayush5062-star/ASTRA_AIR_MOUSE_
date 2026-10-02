@@ -373,7 +373,7 @@ class SurvivorDetector(object):
                                d_cam_optical[1]])
 
         # Transform to WORLD frame, not `map`. The static world_to_map_tf
-        # (see launch/nidar_fuel_upstream.launch) publishes world -> map with
+        # (see nidar_planner/launch/nidar_fuel_upstream.launch) publishes world -> map with
         # a 90 deg yaw and translation to the launch pad, so `map` in this
         # stack is the camera_init odometry frame -- its coordinates are NOT
         # world coordinates and cannot be fed to the arena-grid math directly.

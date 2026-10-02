@@ -150,7 +150,7 @@ pin_process "bin/px4" "4,5"
 pin_process "mavros_node" "6,7"
 
 echo "Launching FAST-LIO2 Mapping (RViz=${RVIZ_ARG}; set RVIZ=1 to show it)..."
-roslaunch /home/developer/NIDAR/launch/fast_lio/nidar_mapping.launch rviz:=$RVIZ_ARG > /tmp/fast_lio.log 2>&1 &
+roslaunch nidar_slam nidar_mapping.launch rviz:=$RVIZ_ARG > /tmp/fast_lio.log 2>&1 &
 sim_sleep 2
 pin_process "fastlio_mapping" "0,1"
 
@@ -212,7 +212,7 @@ rosrun mavros mavparam set MIS_TAKEOFF_ALT 1.5 >/dev/null 2>&1 || true
 echo "============================================================"
 echo "Launching Upstream FUEL Exploration Stack..."
 echo "============================================================"
-roslaunch /home/developer/NIDAR/launch/nidar_fuel_upstream.launch > /tmp/fuel.log 2>&1 &
+roslaunch nidar_planner nidar_fuel_upstream.launch > /tmp/fuel.log 2>&1 &
 FUEL_PID=$!
 sim_sleep 5
 

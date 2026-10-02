@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_slam</name>
+  <version>0.1.0</version>
+  <description>
+    FAST-LIO glue for NIDAR: the mapping launch, the FAST-LIO parameter file it loads
+    (config/fast_lio/nidar_sim.yaml, whose altitude datum and extrinsics are rendered by
+    nidar_config/scripts/apply_mission_config.py), the robot_description URDF and the
+    RViz profile. Publishes /Fast_LIO/odometry and /cloud_registered.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>fast_lio</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>rviz</exec_depend>
+</package>

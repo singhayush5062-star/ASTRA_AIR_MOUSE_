@@ -10,7 +10,7 @@ flight_envelope_guard:
   # those functions, which silently became wrong as soon as the vehicle stopped spawning at
   # (0, -6.5) -- e.g. when it moved onto a launch pad outside the arena.
   # GENERATED from nidar/launch_pad/center by nidar_config/scripts/apply_mission_config.py.
-  # The world->map static TF in launch/nidar_fuel_upstream.launch must match these exactly;
+  # The world->map static TF in nidar_planner/launch/nidar_fuel_upstream.launch must match these exactly;
   # the generator writes both from the same source for that reason.
   spawn_world_x: 0.0
   spawn_world_y: -9.5

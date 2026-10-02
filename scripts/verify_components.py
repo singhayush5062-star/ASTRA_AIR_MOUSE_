@@ -27,7 +27,7 @@ import sensor_msgs.point_cloud2 as pc2
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SDF = os.path.join(REPO, 'simulation/PX4-Autopilot-v1.14.3/Tools/simulation/gazebo-classic/'
                          'sitl_gazebo-classic/models/x500_vlp16/x500_vlp16.sdf')
-FASTLIO = os.path.join(REPO, 'config/fast_lio/nidar_sim.yaml')
+FASTLIO = os.path.join(REPO, 'catkin_ws/src/nidar_slam/config/fast_lio/nidar_sim.yaml')
 
 # x500 prop geometry, read off x500.sdf / the prop meshes
 HUB_R = math.hypot(0.174, 0.174)

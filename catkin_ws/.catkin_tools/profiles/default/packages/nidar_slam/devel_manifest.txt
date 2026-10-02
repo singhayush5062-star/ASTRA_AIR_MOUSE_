@@ -1,0 +1,4 @@
+nidar_slam
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_slam/lib/pkgconfig/nidar_slam.pc /home/developer/NIDAR/catkin_ws/devel/lib/pkgconfig/nidar_slam.pc
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_slam/share/nidar_slam/cmake/nidar_slamConfig-version.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_slam/cmake/nidar_slamConfig-version.cmake
+/home/developer/NIDAR/catkin_ws/devel/.private/nidar_slam/share/nidar_slam/cmake/nidar_slamConfig.cmake /home/developer/NIDAR/catkin_ws/devel/share/nidar_slam/cmake/nidar_slamConfig.cmake

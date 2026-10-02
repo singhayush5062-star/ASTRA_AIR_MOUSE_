@@ -3,7 +3,7 @@
     
     <arg name="rviz" default="true" />
 
-    <rosparam command="load" file="/home/developer/NIDAR/config/fast_lio/nidar_sim.yaml" />
+    <rosparam command="load" file="$(find nidar_slam)/config/fast_lio/nidar_sim.yaml" />
 
     <!-- FAST-LIO Global parameters -->
     <param name="feature_extract_enable" type="bool" value="0"/>
@@ -15,7 +15,7 @@
     <param name="runtime_pos_log_enable" type="bool" value="0" />
 
     <!-- Load URDF -->
-    <param name="robot_description" textfile="/home/developer/NIDAR/config/iris_vlp16.urdf" />
+    <param name="robot_description" textfile="$(find nidar_slam)/config/iris_vlp16.urdf" />
 
     <!-- Robot State Publisher -->
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="nidar_robot_state_publisher" output="screen" />
@@ -37,7 +37,7 @@
 
     <!-- RViz -->
     <group if="$(arg rviz)">
-        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d /home/developer/NIDAR/config/nidar_lidar.rviz" />
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find nidar_slam)/rviz/nidar_lidar.rviz" />
     </group>
 
 </launch>

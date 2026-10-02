@@ -32,7 +32,7 @@ Design decisions that matter:
       grid at 1 byte/cell is 160 kB/msg, so 2 Hz = 320 kB/s = 2.5 Mbps
       already, leaving headroom for the camera).
     * frame_id is "map" so the world_to_map static TF (published by
-      launch/nidar_fuel_upstream.launch) puts this grid in world coordinates
+      nidar_planner/launch/nidar_fuel_upstream.launch) puts this grid in world coordinates
       directly. Nothing here does its own frame math.
 
 Related Phase 5 nodes:

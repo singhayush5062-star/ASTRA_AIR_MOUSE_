@@ -24,14 +24,14 @@ import yaml
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 CONFIG = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_config', 'config', 'mission_config.yaml')
 
-# The file FAST-LIO actually loads, per launch/fast_lio/nidar_mapping.launch:
-#     <rosparam command="load" file=".../config/fast_lio/nidar_sim.yaml" />
+# The file FAST-LIO actually loads, per nidar_slam/launch/nidar_mapping.launch:
+#     <rosparam command="load" file="$(find nidar_slam)/config/fast_lio/nidar_sim.yaml" />
 # This pointed at catkin_ws/src/FAST_LIO/config/velodyne.yaml until 2026-09-06, which is
 # upstream's stock config and is loaded by nothing in this stack. Every regeneration since
 # the sim config was introduced wrote blind / extrinsic_T / pcd_save_en into a file no node
 # reads, so the generator reported success while the live values silently drifted: it was
 # still carrying the iris-era extrinsic_T of [0, 0, 0.12] after the whole X500 migration.
-FASTLIO_YAML = os.path.join(REPO, 'config', 'fast_lio', 'nidar_sim.yaml')
+FASTLIO_YAML = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_slam', 'config', 'fast_lio', 'nidar_sim.yaml')
 # The flight vehicle model. The lidar mount, its standoff mast and the sensor's range window
 # are all generated into this file from nidar.lidar, so that raising the lidar cannot leave the
 # mast floating in mid air or the FAST-LIO extrinsic pointing at the old height.
@@ -50,7 +50,7 @@ LIDAR_BODY_LEN = 0.0717                          # the sensor cylinder's own hei
 
 FUEL_XML = os.path.join(REPO, 'catkin_ws', 'src', 'fuel', 'fuel_planner',
                         'exploration_manager', 'launch', 'algorithm.xml')
-FUEL_LAUNCH = os.path.join(REPO, 'launch', 'nidar_fuel_upstream.launch')
+FUEL_LAUNCH = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_planner', 'launch', 'nidar_fuel_upstream.launch')
 GUARD_YAML = os.path.join(REPO, 'catkin_ws', 'src', 'nidar_config', 'config', 'flight_envelope_guard.yaml')
 WORLD = os.path.join(REPO, 'nidar_competition.world')
 

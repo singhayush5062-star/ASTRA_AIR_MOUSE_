@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_planner</name>
+  <version>0.1.0</version>
+  <description>
+    FUEL wiring for NIDAR: nidar_fuel_upstream.launch brings up exploration_node and
+    traj_server against FAST-LIO, publishes the world->map->camera_init static TFs and
+    loads the flight envelope guard limits. Its frontier box and velocity literals are
+    rendered by nidar_config/scripts/apply_mission_config.py.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>exploration_manager</exec_depend>
+  <exec_depend>plan_manage</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+</package>
