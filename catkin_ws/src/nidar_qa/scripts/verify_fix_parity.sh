@@ -88,13 +88,13 @@ COVERAGE=$WS/src/nidar_mission/scripts/coverage_reporter.py
 MAP2D=$WS/src/nidar_map2d/scripts/map_2d_slicer.py
 GRIDVIZ=$WS/src/nidar_map2d/scripts/grid_visualizer.py
 SURVIVOR_MSG_PY=$WS/devel/lib/python3/dist-packages/nidar_msgs/msg/_Survivor.py
-MODEL_PT=$WS/src/nidar_perception/models/detection/PERSON_DETECTION_MODEL_V3/best.pt
+MODEL_PT=$WS/src/nidar_perception/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt
 # Model weights: an absent .pt turns the detector node into a FATAL, which
 # under nidar_mission.launch (required=false by default for output=screen)
 # would silently vanish and leave the run looking like a healthy exploration
 # with zero detections -- the same failure mode the stop-handshake bug had.
 if [ -f "$MODEL_PT" ]; then echo "ok            detector model  in  $MODEL_PT"
-else echo "ABSENT        detector model at $MODEL_PT -- unzip PERSON_DETECTION_MODEL_V3"
+else echo "ABSENT        detector model at $MODEL_PT -- see nidar_perception/models/detection/"
      fail=1
 fi
 # Source: the strings we require the detector to log, so a silent rewrite that

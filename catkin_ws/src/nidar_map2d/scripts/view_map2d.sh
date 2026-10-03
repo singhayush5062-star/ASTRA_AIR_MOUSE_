@@ -10,9 +10,13 @@
 # LIVE MODE
 # ---------
 # Requires the mission stack to be running (test_takeoff.sh brings roscore,
-# FUEL, and the Phase 5 nodes up). The layout at nidar_map2d/rviz/nidar_map2d.rviz has
-# fixed_frame=world and shows /map_2d, /grid_markers, /survivor_tags in a
-# top-down orthographic camera.
+# FUEL, and the Phase 5 nodes up; so does the GCS START button). It runs
+# nidar_map2d/launch/mission_view.launch: the layout at nidar_map2d/rviz/nidar_map2d.rviz
+# (fixed_frame=world, top-down orthographic) shows the FAST-LIO 2D map /map_2d,
+# /grid_markers, /survivor_tags, the drone (/Fast_LIO/odometry) and FUEL's planned and
+# executed trajectories (re-stamped into their real frame by fuel_vis_relay.py).
+# Optional displays (tick them in RViz): FAST-LIO flown path, FUEL frontiers and
+# viewpoints, the registered point cloud, TF.
 #
 # BAG MODE (post-run map inspection)
 # ----------------------------------
@@ -49,7 +53,8 @@ EOF
 # --- CHECK MODE ---------------------------------------------------------
 if [ "${1:-}" = "--check" ]; then
     echo "-- Required topic status (5 s sample) --"
-    for topic in /map_2d /grid_markers /survivor_tags /tf_static; do
+    for topic in /map_2d /grid_markers /survivor_tags /Fast_LIO/odometry \
+                 /planning_vis/trajectory /planning/travel_traj /tf_static; do
         if timeout 3 rostopic info "$topic" >/dev/null 2>&1; then
             hz=$(timeout 5 rostopic hz "$topic" 2>/dev/null \
                     | grep -oE 'average rate: [0-9.]+' | head -1)
@@ -125,7 +130,7 @@ if [ "${1:-}" = "--bag" ]; then
     echo "rosbag play PID=$BAG_PID (paused; press space in the rosbag terminal or the RViz sim-time panel to advance)"
     # Give the bag a moment to advertise topics latched by rosbag
     sleep 1
-    exec rviz -d "$RVIZ_CFG"
+    exec roslaunch nidar_map2d mission_view.launch rviz_config:="$PWD/$RVIZ_CFG"
 fi
 
 if [ "${1:-}" != "" ]; then
@@ -147,5 +152,5 @@ EOF
     exit 1
 fi
 echo "Opening RViz with $RVIZ_CFG (fixed frame: world)"
-echo "Topics required: /map_2d /grid_markers /survivor_tags"
-exec rviz -d "$RVIZ_CFG"
+echo "Topics: /map_2d /grid_markers /survivor_tags /Fast_LIO/odometry, FUEL /planning_vis/trajectory /planning/travel_traj"
+exec roslaunch nidar_map2d mission_view.launch rviz_config:="$PWD/$RVIZ_CFG"

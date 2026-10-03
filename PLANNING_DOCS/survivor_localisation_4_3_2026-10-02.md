@@ -53,3 +53,36 @@ A bare Gazebo (no PX4, FAST-LIO or TF chain) with `x500_vlp16`, gravity off. The
 * Only about half of raw detections pass the border gate, so a survivor needs three *clean* views before it is confirmed.
 * `merge_radius_m` assumes real survivors are more than 1.5 m apart (the sim's closest pair is 2.8 m).
 * Three flights is a small sample for the "6 of 6" result; survivor coverage depends on the flight path and camera view, which vary run to run.
+
+## 7. Model swap to YOLO26S_DRONE_PERSON_V1 (2026-10-03)
+
+`detector.launch` now loads `models/detection/YOLO26S_DRONE_PERSON_V1/best.pt` (YOLO26s, single
+class person, trained on drone-view imagery). `PERSON_DETECTION_MODEL_V3` stays in
+`models/detection/` for comparison and is a one-line `model_path` change away.
+
+**Finding 6 no longer holds for this model.** It was trained without vertical-flip augmentation
+and barely detects the upside-down raw frame. So the detector now runs YOLO on the de-rotated
+frame (`rotate_180`, true in the sim) and maps the boxes back to raw pixels with
+`rotate_boxes_180`. Localisation, gates and the GCS overlay are unchanged.
+
+Frames where the model reports a person at confidence >= 0.55:
+
+| Frames | V3 raw | V3 de-rotated | new raw | new de-rotated |
+|---|---|---|---|---|
+| 158, one survivor at 2.5–4 m (hovering) | 0 | 76 | 0 | **146** |
+| 615 sampled at 1 Hz over two flights | 70 | 78 | 24 | 57 |
+
+V3 fires on more flight frames, but checking the 32 frames where only V3 fired showed mostly
+false positives (shadows, wall edges, bright floor triangles at 0.6–0.9) and arms cut off at the
+image edge. All 11 frames where only the new model fired are whole people.
+
+Full flights with the new model (headless, from the GCS):
+
+| Flight | Coverage | Tags | In correct cell | Survivors covered | Median / max error |
+|---|---|---|---|---|---|
+| 20261003_100020 | 99.0 % | 5 (+1 duplicate merged) | 5/5 | 5/6 | 0.38 m / 0.55 m |
+| 20261003_101140 | 87.9 % (FUEL ended early) | 3 | 3/3 | 3/6 | 0.44 m / 0.46 m |
+
+There were no false or wrong-cell tags. Position error is lower than V3's best flight (0.56 m /
+0.80 m). How many survivors get covered still depends on the flight path (limit in section 6);
+two flights are too few to compare that with V3's 6/6.

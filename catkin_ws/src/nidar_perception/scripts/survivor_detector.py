@@ -18,8 +18,15 @@ found by ground-truth experiments (PLANNING_DOCS/survivor_localisation_4_3_2026-
      metres. The box centre is the body centre in either orientation.
   2. The pixel->ray mapping assumed an upright image (see pixel_ray_camera_link).
 Aiming the box centre at a plane through the body's centre cut the median error from ~5 m to
-~0.4 m. YOLO detects as well on the upside-down frame as on a de-rotated one (15 vs 14 of 40
-poses), so the image is NOT rotated. A real dummy needs its own detection.target_height_m.
+~0.4 m. A real dummy needs its own detection.target_height_m.
+
+Why the frame is de-rotated before YOLO (rotate_180, on in the sim). The first model
+(PERSON_DETECTION_MODEL_V3) detected about as well on the upside-down frame as on a de-rotated
+one (15 vs 14 of 40 poses). YOLO26S_DRONE_PERSON_V1 was trained on upright drone imagery
+without vertical-flip augmentation and does not: on 158 sim frames of a survivor it found the
+person in 146 upright frames and 0 upside-down ones at confidence >= 0.55. The boxes are rotated
+back into raw-image pixels straight away, so everything downstream (localisation, gates, the
+GCS overlay) still works in raw-image coordinates. A camera mounted upright sets it false.
 
 Why no /cloud_registered raycast (the phase plan suggests one). Measured in the same experiment:
 for 25 of 37 detections the lidar returned NO point within 0.9 m of the survivor (a VLP-16 fan of
@@ -42,6 +49,7 @@ import os
 import threading
 import time
 
+import cv2
 import numpy as np
 import rospy
 import tf2_ros
@@ -114,6 +122,12 @@ def intersect_plane(origin, direction, z_plane, max_range, min_down=0.05):
     if math.hypot(hit[0] - origin[0], hit[1] - origin[1]) > max_range:
         return None
     return hit
+
+
+def rotate_boxes_180(boxes, width, height):
+    """xyxy boxes found on a frame rotated by 180 deg -> the same boxes in the raw frame."""
+    b = np.asarray(boxes, dtype=float).reshape(-1, 4)
+    return np.stack([width - b[:, 2], height - b[:, 3], width - b[:, 0], height - b[:, 1]], axis=1)
 
 
 def box_is_usable(bbox, width, height, border_px, min_side_px):
@@ -206,6 +220,8 @@ class SurvivorDetector(object):
         self.output_topic = rospy.get_param('~output_topic', '/survivors')
         self.marker_topic = rospy.get_param('~marker_topic', '/survivor_markers')
         self.ground_truth = bool(rospy.get_param('~ground_truth_check', True))
+        # The sim camera is mounted rolled 180 deg; run YOLO on the upright frame (module docstring)
+        self.rotate_180 = bool(rospy.get_param('~rotate_180', False))
         # Localisation (see the module docstring for how these were chosen)
         self.target_height = float(rospy.get_param('~target_height_m', 0.35))
         self.border_px = int(rospy.get_param('~border_margin_px', 6))
@@ -245,8 +261,8 @@ class SurvivorDetector(object):
                     os.path.abspath(__file__))))))
             self.model_path = os.path.join(repo, self.model_path)
         if not os.path.exists(self.model_path):
-            rospy.logfatal('[detector] model not found at %s. Did you extract '
-                           'PERSON_DETECTION_MODEL_V3.zip into nidar_perception/models/detection/? '
+            rospy.logfatal('[detector] model not found at %s. The weights ship under '
+                           'nidar_perception/models/detection/. '
                            'Expected either a .pt file or an ncnn_model directory.',
                            self.model_path)
             rospy.signal_shutdown('model missing')
@@ -284,8 +300,9 @@ class SurvivorDetector(object):
                 self.device = 'cpu'
         else:
             self.device = self.device_pref
-        rospy.loginfo('[detector] device=%s conf>=%.2f rate=%.1f Hz confirm>=%d',
-                      self.device, self.conf_thresh, self.detect_hz, self.confirm_n)
+        rospy.loginfo('[detector] device=%s conf>=%.2f rate=%.1f Hz confirm>=%d rotate_180=%s',
+                      self.device, self.conf_thresh, self.detect_hz, self.confirm_n,
+                      self.rotate_180)
 
         # Warm the model up on a dummy 640x640 so the first real detection is
         # not a multi-second stall while ncnn compiles kernels / lazy-loads
@@ -419,7 +436,8 @@ class SurvivorDetector(object):
 
         # 3) YOLO forward pass
         t_infer = time.time()
-        results = self.model.predict(frame, device=self.device,
+        results = self.model.predict(cv2.rotate(frame, cv2.ROTATE_180) if self.rotate_180
+                                     else frame, device=self.device,
                                      conf=self.conf_thresh, verbose=False)
         latency_ms = 1000.0 * (time.time() - t_infer)
         height, width = frame.shape[:2]
@@ -430,6 +448,8 @@ class SurvivorDetector(object):
 
         # Ultralytics returns xyxy in original image pixel units.
         boxes = r.boxes.xyxy.cpu().numpy()
+        if self.rotate_180:
+            boxes = rotate_boxes_180(boxes, width, height)
         confs = r.boxes.conf.cpu().numpy()
         self._publish_detections(header, width, height, latency_ms, boxes, confs)
 

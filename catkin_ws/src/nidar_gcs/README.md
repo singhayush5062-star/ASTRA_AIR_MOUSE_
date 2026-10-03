@@ -96,7 +96,10 @@ The upstream look is kept. Changes, all reviewable with
 * `components/map/OccupancyGridMap.tsx` — survivors drawn as hotspots with the grid box
   highlighted, the A1–G7 grid, entry/exit marker position and empty-state text as props, north up
   (it drew south up), cells cached per map update (a 0.05 m map is ~118k cells), and a React
-  hook-order bug fixed (it would crash the moment a map arrived).
+  hook-order bug fixed (it would crash the moment a map arrived). At the team's request
+  (2026-10-03) the cells use RViz's "map" colours (white floor, grey unknown, black walls)
+  instead of the original near-black greys, so the GCS map reads like the RViz view of the same
+  `/map_2d`; the legend swatches have an outline so black and white stay visible.
 * `providers/SimulationProvider.ts` — the backend owns the simulation state; abort reaches it.
 * `store/index.ts` — map, flown path, arena/grid and the setters the hook uses.
 * `services/websocket.ts` — `ManagedWebSocket` exported.

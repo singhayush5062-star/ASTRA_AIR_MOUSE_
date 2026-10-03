@@ -1,0 +1,18 @@
+<launch>
+  <!-- RViz mission view against a running sim (or a replayed bag): the FAST-LIO 2D map
+       (/map_2d from lidar_map_2d.py), the competition grid, survivor tags, the drone, the path it
+       has flown, and FUEL's planned / executed trajectories. Fixed frame `world`, top-down.
+
+           roslaunch nidar_map2d mission_view.launch
+           (or catkin_ws/src/nidar_map2d/scripts/view_map2d.sh, which also handles bag replay)
+
+       FUEL stamps its markers "world" but they are in camera_init coordinates;
+       fuel_vis_relay.py republishes them under /fuel_vis/* with the right frame (see the node). -->
+  <arg name="rviz_config" default="$(find nidar_map2d)/rviz/nidar_map2d.rviz"/>
+
+  <node pkg="nidar_map2d" type="fuel_vis_relay.py" name="fuel_vis_relay" output="log"/>
+
+  <!-- Closing the RViz window (or a GCS RESET, which kills RViz) ends the relay too. -->
+  <node pkg="rviz" type="rviz" name="nidar_mission_rviz" args="-d $(arg rviz_config)"
+        required="true" launch-prefix="nice"/>
+</launch>

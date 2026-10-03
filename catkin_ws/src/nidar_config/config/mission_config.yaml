@@ -642,8 +642,10 @@ nidar:
   # SURVIVOR DETECTION  (Phase 4)
   # ---------------------------------------------------------------------------
   # Consumers: nidar_perception/scripts/survivor_detector.py.
-  # The .pt is the Ultralytics YOLO26n weights from PERSON_DETECTION_MODEL_V3
-  # (single class "person", 640x640, P 0.961 / R 0.950), extracted under
+  # The .pt is the Ultralytics YOLO26s weights from YOLO26S_DRONE_PERSON_V1
+  # (single class "person", 640x640, trained on drone-view imagery; val P 0.73 /
+  # R 0.52 / mAP50 0.58 on that harder set, so not comparable with the previous
+  # PERSON_DETECTION_MODEL_V3's P 0.961 / R 0.950). Shipped under
   # nidar_perception/models/detection/ so a clone can load it without unzipping.
   detection:
     enabled: true
@@ -655,7 +657,11 @@ nidar:
     # -- FAST-LIO starves at load average 12+). NCNN is CPU-only, benchmarked
     # at 28 ms/frame on this laptop (35 FPS), well above the 5 Hz target, and
     # is the same format we'll run on Jetson at competition time.
-    model: catkin_ws/src/nidar_perception/models/detection/PERSON_DETECTION_MODEL_V3/best.pt
+    model: catkin_ws/src/nidar_perception/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt
+    # The sim camera is mounted rolled 180 deg (raw image upside-down). YOLO26S_DRONE_PERSON_V1
+    # only finds upright people, so the detector runs it on the de-rotated frame and maps the
+    # boxes back to raw pixels. False for a camera mounted upright.
+    rotate_180: true
     # Detector runs at DETECT_HZ, not camera rate: the doc's Phase 4 §4.2
     # spec is "5 Hz, not camera rate", CPU headroom is worth more than
     # 30 Hz on a stationary body.

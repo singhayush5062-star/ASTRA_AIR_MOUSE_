@@ -89,6 +89,23 @@ class BoxGate(unittest.TestCase):
         self.assertEqual(sd.box_is_usable((100, 100, 112, 160), 640, 480, 6, 20), (False, 'small'))
 
 
+class RotateBoxes(unittest.TestCase):
+    """rotate_180: YOLO sees cv2.ROTATE_180 of the raw frame; boxes must land back on raw pixels."""
+
+    def test_box_maps_back_to_raw_pixels(self):
+        import cv2
+        raw = np.zeros((480, 640), np.uint8)
+        raw[50:150, 100:200] = 255                       # raw box (100, 50, 200, 150)
+        ys, xs = np.nonzero(cv2.rotate(raw, cv2.ROTATE_180))
+        seen = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)   # what YOLO would report
+        np.testing.assert_allclose(sd.rotate_boxes_180([seen], 640, 480), [[100, 50, 200, 150]])
+
+    def test_twice_is_identity_and_empty_is_empty(self):
+        b = np.array([[10.5, 20.0, 300.0, 410.25], [0, 0, 640, 480]])
+        np.testing.assert_allclose(sd.rotate_boxes_180(sd.rotate_boxes_180(b, 640, 480), 640, 480), b)
+        self.assertEqual(sd.rotate_boxes_180(np.zeros((0, 4)), 640, 480).shape, (0, 4))
+
+
 class DuplicateMerge(unittest.TestCase):
     """The 2026-10-02 flight tagged survivor_4 three times and survivor_5 twice."""
 

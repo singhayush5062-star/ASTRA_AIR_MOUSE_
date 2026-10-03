@@ -4,11 +4,13 @@ import type { ArenaGrid } from '@/store';
 
 // ─── Map renderer ─────────────────────────────────────────────
 
+// Cells use RViz's "map" colour scheme (white floor, grey unknown, black walls), at the team's
+// request (2026-10-03): the original near-black greys made the same map hard to read.
 const CELL_COLORS = {
-  unknown:    '#0d0d10',
-  free:       '#161619',
-  occupied:   '#3a3a42',
-  explored:   '#1a1a22',
+  unknown:    '#808080',
+  free:       '#FFFFFF',
+  occupied:   '#000000',
+  explored:   '#E0E0E0',
   frontier:   '#332800',
   drone:      '#00F0FF',
   trajectory: '#00F0FF',
@@ -441,6 +443,9 @@ export function OccupancyGridMap({
       legendItems.forEach((item, i) => {
         ctx.fillStyle = item.color;
         ctx.fillRect(legX, legY + i * 14, 8, 8);
+        ctx.strokeStyle = '#71717A';   // black WALL / white FREE swatches stay visible
+        ctx.lineWidth = 0.75;
+        ctx.strokeRect(legX + 0.5, legY + i * 14 + 0.5, 7, 7);
         ctx.fillStyle = '#A1A1AA';
         ctx.font = '8px JetBrains Mono, monospace';
         ctx.textAlign = 'left';

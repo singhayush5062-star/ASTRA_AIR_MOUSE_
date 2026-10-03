@@ -33,7 +33,7 @@
   <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_tf"
         args="0 0 0 -3.0715 -0.259724 0 camera_mount_link camera_link"/>
 
-  <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26n
+  <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26s
        at 5 Hz (mission_config.yaml: nidar/detection/detect_hz), back-projects to the
        a body-height plane, tracks with a 0.75 m NN radius, publishes latched /survivors on
        three consistent detections. Ground-truth-vs-tag comparison is printed inline
@@ -46,8 +46,12 @@
         output="screen">
     <param name="enabled" value="true"/>
     <!-- Weights ship inside this package. PyTorch best.pt with device=auto (CUDA when
-         available) so inference runs on the GPU. -->
-    <param name="model_path" value="$(find nidar_perception)/models/detection/PERSON_DETECTION_MODEL_V3/best.pt"/>
+         available) so inference runs on the GPU. YOLO26S_DRONE_PERSON_V1 replaced
+         PERSON_DETECTION_MODEL_V3 (still in models/detection/ for comparison) on 2026-10-03. -->
+    <param name="model_path" value="$(find nidar_perception)/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt"/>
+    <!-- The sim camera is mounted rolled 180 deg and this model only finds upright people:
+         YOLO sees the de-rotated frame, boxes come back in raw-image pixels. -->
+    <param name="rotate_180" value="true"/>
     <param name="detect_hz" value="5.0"/>
     <param name="confidence_threshold" value="0.55"/>
     <param name="device" value="auto"/>

@@ -14,8 +14,9 @@ model (optical axis +X, image right = -Y, image down = -Z) whatever roll the SDF
 sensor, and survivor_detector.pixel_ray_camera_link uses exactly that model. So the detector is
 correct for any camera roll; what the roll changes is only whether the raw image is upright.
 With the current SDF poses the sensor is rolled 180 deg, so the raw image is UPSIDE-DOWN
-(verified 2026-10-02 by rotating a frame: the survivors are then upright). YOLO does as well on
-it as on a de-rotated frame, so the detector does not rotate it.
+(verified 2026-10-02 by rotating a frame: the survivors are then upright). The detector's YOLO26s
+model only finds upright people, so it runs on the de-rotated frame (detection.rotate_180) and
+maps the boxes back to raw pixels.
 
 (Until 2026-10-02 this script labelled +Y "image right" and +Z "image down" but asserted only
 +X, so a wrong y/z convention in the detector passed this check. The labels below are the
