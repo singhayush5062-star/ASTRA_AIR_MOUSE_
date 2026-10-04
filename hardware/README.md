@@ -2,6 +2,10 @@
 
 Complete phase-by-phase hardware verification guide for the **ASTRA AirMouse** autonomous drone.
 
+> **How to install and configure** everything this checklist verifies (Jetson container, wiring,
+> sensor placement in `hardware.yaml`, the PX4 parameter file, GCS connection, tuning):
+> **[DEPLOYMENT.md](DEPLOYMENT.md)**. Bring the stack up with `scripts/jetson_onboard.sh bringup`.
+
 ---
 
 ## The 1 Golden Rule
@@ -28,7 +32,7 @@ INPUT ──► INTERFACE ──► HARDWARE RESPONSE ──► TELEMETRY CONFIR
 - [ ] `/mavros/state` reports `connected: true` and stable heartbeat
 - [ ] Critical parameters match configuration:
   - `EKF2_EV_CTRL = 11` (external vision position + yaw fusion)
-  - `EKF2_HGT_REF = 2` (rangefinder primary height)
+  - `EKF2_HGT_REF = 3` (vision height = FAST-LIO's TFmini-pinned Z; generated `nidar_hw.params`, DEPLOYMENT.md §7.3)
   - `MPC_THR_HOVER` matched to physical vehicle mass
 - [ ] Arm and Disarm commands execute cleanly
 
@@ -40,11 +44,11 @@ INPUT ──► INTERFACE ──► HARDWARE RESPONSE ──► TELEMETRY CONFIR
 ### 1.4 Sensors
 - [ ] **IMU:** Drone tilt (pitch/roll/yaw) matches signs in `/mavros/imu/data`
 - [ ] **Barometer:** Stable altitude reading on bench
-- [ ] **TFmini Rangefinder:** Actual distance matches `/mavros/distance_sensor/*`
+- [ ] **TFmini Rangefinder:** Actual distance matches `/tfmini/range` (and `/mavros/distance_sensor/*` when wired to the FC)
 - [ ] **LiDAR:** Point cloud publishing at $\ge 10\text{ Hz}$ with valid timestamps and frame ID
 
 ### 1.5 TF & Coordinate Frames
-- [ ] Valid TF tree: `world` $\to$ `camera_init` $\to$ `base_link` $\to$ `lidar`, `camera`, `tfmini`
+- [ ] Valid TF tree: `world` $\to$ `map` $\to$ `camera_init` $\to$ `body` $\to$ `base_link` $\to$ `livox_frame`, `camera_link`, `tfmini_link`
 - [ ] Moving drone forward $+X \implies$ TF reports $+X$ (not $-X$ or $Y$)
 - [ ] Moving drone left $+Y \implies$ TF reports $+Y$
 - [ ] Lifting drone up $+Z \implies$ TF reports $+Z$

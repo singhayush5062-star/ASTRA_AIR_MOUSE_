@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Radio, Cpu, Activity, ShieldAlert, Wifi,
   AlertOctagon, Loader2, PowerOff, MousePointer, RotateCcw,
+  PlaneTakeoff, PlaneLanding, House,
 } from 'lucide-react';
-import { useHardwareStore } from '@/store';
+import { useHardwareStore, type DroneCommand } from '@/store';
+import { useHardwareBackend } from '@/hooks/useHardwareBackend';
 import { OccupancyGridMap } from '@/components/map/OccupancyGridMap';
 import { CameraView, type CameraStatus } from '@/components/camera/CameraView';
 import {
@@ -17,6 +19,75 @@ import { ConnectDroneModal } from '@/components/hardware/ConnectDroneModal';
 import { useAirMouse } from '@/hooks/useAirMouse';
 import { AirMouseOverlay } from '@/components/airmouse/AirMouseOverlay';
 import { AirMouseDashboard } from '@/components/airmouse/AirMouseDashboard';
+
+// ─── Flight Commands (TAKEOFF / RTL / LAND) ────────────────────
+//
+// TAKEOFF starts the autonomous mission (onboard commander: pre-flight checks, arm, OFFBOARD),
+// RTL makes the mission fly back out of the arena to the launch pad, LAND lands where the drone
+// is (PX4 AUTO.LAND). TAKEOFF arms the vehicle, so it takes two presses like EMERGENCY ABORT.
+
+const COMMANDS: { cmd: DroneCommand; label: string; color: string; Icon: typeof PlaneTakeoff }[] = [
+  { cmd: 'takeoff', label: 'TAKEOFF', color: '#00FF41', Icon: PlaneTakeoff },
+  { cmd: 'rtl',     label: 'RTL',     color: '#FFB000', Icon: House },
+  { cmd: 'land',    label: 'LAND',    color: '#00F0FF', Icon: PlaneLanding },
+];
+
+function FlightCommands() {
+  const hwState     = useHardwareStore(s => s.hwConnectionState);
+  const pending     = useHardwareStore(s => s.commandPending);
+  const sendCommand = useHardwareStore(s => s.sendCommand);
+  const [confirmTakeoff, setConfirmTakeoff] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const run = async (cmd: DroneCommand) => {
+    if (pending) return;
+    if (cmd === 'takeoff' && !confirmTakeoff) {
+      setConfirmTakeoff(true);
+      confirmTimer.current = setTimeout(() => setConfirmTakeoff(false), 3000);
+      return;
+    }
+    clearTimeout(confirmTimer.current);
+    setConfirmTakeoff(false);
+    const res = await sendCommand(cmd);
+    setResult({ ok: res.ok, text: `${cmd.toUpperCase()}: ${res.detail}` });
+  };
+
+  const linkUp = hwState === 'CONNECTED';
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
+        {COMMANDS.map(({ cmd, label, color, Icon }) => {
+          // A degraded link may still carry LAND / RTL; never start a takeoff on one.
+          const disabled = !!pending || (cmd === 'takeoff' ? !linkUp : hwState !== 'CONNECTED' && hwState !== 'DEGRADED');
+          const armed = cmd === 'takeoff' && confirmTakeoff;
+          return (
+            <button
+              key={cmd}
+              onClick={() => run(cmd)}
+              disabled={disabled}
+              title={cmd === 'takeoff' ? 'Start the autonomous mission (press twice)'
+                : cmd === 'rtl' ? 'Return through the arena door to the launch pad'
+                : 'Land where the drone is (PX4 AUTO.LAND)'}
+              className="flex items-center justify-center gap-1 py-1.5 text-[9px] font-mono font-bold tracking-wider uppercase transition-all duration-150 disabled:opacity-40"
+              style={armed ? { background: color, border: `1px solid ${color}`, color: '#09090B' }
+                : { background: 'transparent', border: `1px solid ${color}`, color }}
+            >
+              {pending === cmd ? <Loader2 size={10} className="animate-spin" /> : <Icon size={10} />}
+              {armed ? 'CONFIRM' : label}
+            </button>
+          );
+        })}
+      </div>
+      {result && (
+        <p className="text-[8px] font-mono leading-tight break-words"
+          style={{ color: result.ok ? '#00FF41' : '#FF003C' }}>
+          {result.text}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ─── Hardware Actions & Emergency Abort ────────────────────────
 
@@ -98,9 +169,10 @@ function HardwareControls() {
     );
   }
 
-  // If connected: show Abort and Disconnect controls
+  // If connected: show flight commands, Abort and Disconnect controls
   return (
     <div className="flex flex-col gap-2">
+      <FlightCommands />
       {aborted ? (
         <div
           className="flex items-center justify-center gap-2 py-2 text-[11px] font-mono font-bold tracking-widest uppercase animate-pulse"
@@ -452,6 +524,10 @@ export default function HardwareDashboard() {
   const isConnectModalOpen = useHardwareStore(s => s.isConnectModalOpen);
   const setConnectModalOpen = useHardwareStore(s => s.setConnectModalOpen);
 
+  // Live data from the GCS backend's link to the real drone.
+  useHardwareBackend();
+
+  const arena       = useHardwareStore(s => s.arena);
   const map         = useHardwareStore(s => s.map);
   const trajectory  = useHardwareStore(s => s.trajectory);
   const survivors   = useHardwareStore(s => s.survivors);
@@ -535,6 +611,12 @@ export default function HardwareDashboard() {
               droneYaw={droneYaw}
               trajectory={trajectory}
               survivors={survivors}
+              grid={arena?.grid ?? null}
+              startPoint={arena?.entry}
+              startLabel="ENTRY / EXIT"
+              emptyHint={hwState === 'CONNECTED' || hwState === 'DEGRADED'
+                ? 'Live 2D map arrives over the ROS link to the drone (Wi-Fi). MAVLink-only links carry no map.'
+                : 'Connect the drone to see its live 2D map.'}
               className="w-full h-full"
             />
           </div>

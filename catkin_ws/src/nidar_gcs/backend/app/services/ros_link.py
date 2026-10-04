@@ -14,7 +14,7 @@ import json
 import os
 import sys
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 from app.core.config import settings
 
@@ -22,7 +22,11 @@ BRIDGE_SCRIPT = os.path.join(settings.NIDAR_GCS_DIR, "scripts", "gcs_ros_bridge.
 
 
 class RosLink:
-    def __init__(self) -> None:
+    def __init__(self, env: Optional[Dict[str, str]] = None) -> None:
+        # Environment the bridge runs with, on top of os.environ: the simulation's link uses the
+        # local master as-is; the hardware link points ROS_MASTER_URI/ROS_IP at the Jetson and
+        # selects the bridge's low-bandwidth "hardware" profile.
+        self.env_overrides: Dict[str, str] = dict(env or {})
         self.bridge_status: str = "stopped"     # stopped | waiting_master | connected
         self.state: Dict[str, Any] = {}
         self.state_time: float = 0.0
@@ -74,13 +78,17 @@ class RosLink:
                 # The bridge must run with the plain ROS environment: os.environ is the
                 # environment start_gcs.sh sourced (the backend's own extra packages are added to
                 # sys.path in run.py, not to PYTHONPATH, so they never leak into ROS processes).
+                env = dict(os.environ)
+                env.update(self.env_overrides)
+                if "ROS_IP" in self.env_overrides:
+                    env.pop("ROS_HOSTNAME", None)   # ROS_HOSTNAME would win over ROS_IP
                 self._proc = await asyncio.create_subprocess_exec(
                     "python3", "-u", BRIDGE_SCRIPT,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL,
                     limit=16 * 1024 * 1024,
-                    env=dict(os.environ),
+                    env=env,
                 )
                 await self._read(self._proc)
             except asyncio.CancelledError:
@@ -182,6 +190,36 @@ class RosLink:
             if entry in self._acks:
                 self._acks.remove(entry)
             return {"ok": False, "detail": "timeout"}
+
+    @property
+    def running(self) -> bool:
+        return self._task is not None
+
+    async def mjpeg(self) -> AsyncGenerator[bytes, None]:
+        """multipart/x-mixed-replace body of the bridge's annotated camera frames. Frames are
+        only encoded by the bridge while at least one of these streams is open."""
+        self.camera_client(+1)
+        try:
+            last = -1
+            idle = 0.0
+            while True:
+                ev = self.frame_event
+                if self.frame_seq == last and ev is not None:
+                    try:
+                        await asyncio.wait_for(ev.wait(), 1.0)
+                    except asyncio.TimeoutError:
+                        idle += 1.0
+                        if idle > 10.0:
+                            return  # camera gone; the UI falls back to its offline panel
+                        continue
+                idle = 0.0
+                jpg = self.frame_jpeg
+                last = self.frame_seq
+                if jpg:
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                           + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+        finally:
+            self.camera_client(-1)
 
     def camera_client(self, delta: int) -> None:
         self.camera_clients = max(0, self.camera_clients + delta)

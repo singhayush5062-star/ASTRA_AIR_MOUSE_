@@ -20,6 +20,7 @@ class SubsystemStatus(str, Enum):
     RUNNING    = "RUNNING"
     READY      = "READY"
     ERROR      = "ERROR"
+    UNKNOWN    = "UNKNOWN"   # no link that could report it (e.g. MAVLink-only hardware link)
 
 
 class Vec3(BaseModel):

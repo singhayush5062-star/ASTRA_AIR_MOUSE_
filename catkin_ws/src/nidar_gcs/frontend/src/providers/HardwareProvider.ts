@@ -19,6 +19,7 @@ import type {
   IHardwareProvider,
 } from './types';
 import { useHardwareStore } from '@/store';
+import { API_BASE } from '@/services/api';
 
 export class HardwareProvider
   implements
@@ -34,7 +35,7 @@ export class HardwareProvider
   private baseUrl: string;
   private ws: WebSocket | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = API_BASE) {
     this.baseUrl = baseUrl;
   }
 
@@ -91,7 +92,7 @@ export class HardwareProvider
           useHardwareStore.getState().setConnectionState('DISCONNECTED', 'Hardware connection dropped');
         }
       };
-    } catch (e) {
+    } catch {
       // WS initialization error
     }
   }
@@ -137,12 +138,8 @@ export class HardwareProvider
   }
 
   async triggerAbort(): Promise<void> {
-    useHardwareStore.getState().triggerEmergencyAbort();
-    try {
-      await fetch(`${this.baseUrl}/api/mission/abort`, { method: 'POST' });
-    } catch {
-      // Offline fallback already handled in store
-    }
+    // The store sends the abort to the backend (POST /api/hardware/abort -> PX4 AUTO.LAND).
+    await useHardwareStore.getState().triggerEmergencyAbort();
   }
 
   getSurvivors(): Survivor[] {

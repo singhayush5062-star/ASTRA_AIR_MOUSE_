@@ -1,19 +1,13 @@
 import { useEffect } from 'react';
 import { useSimulationStore, type ArenaInfo } from '@/store';
 import { ManagedWebSocket } from '@/services/websocket';
+import { API_BASE, WS_BASE } from '@/services/api';
 import type {
   AutonomyInfo, DroneState, MissionEvent, MissionPhase, MissionState, OccupancyGridMeta,
   SimulationState, Survivor, SystemHealth,
 } from '@/types';
 
-// Backend base URLs. When the UI is served by the backend itself (http://<host>:8000) the
-// backend is the page's own origin; under the Vite dev server (:5173) it is localhost:8000.
-const devServer = typeof window !== 'undefined' && window.location.port === '5173';
-const API_BASE = import.meta.env.VITE_API_URL
-  || (devServer || typeof window === 'undefined' ? 'http://localhost:8000' : window.location.origin);
-const WS_BASE = import.meta.env.VITE_WS_URL
-  || API_BASE.replace(/^http/, 'ws') + '/api/ws';
-
+// Backend base URLs: see services/api.ts.
 export const SIM_API_BASE = API_BASE;
 
 interface TelemetryPayload {

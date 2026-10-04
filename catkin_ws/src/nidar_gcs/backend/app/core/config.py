@@ -46,6 +46,29 @@ class Settings(BaseSettings):
     # Built web UI, served at / when present (scripts/setup_gcs.sh builds it).
     FRONTEND_DIST: str = os.path.join(_GCS_DIR, "frontend", "dist")
 
+    # ── Real drone (Hardware dashboard) ────────────────────────
+    # MAVLink identity of this GCS (QGroundControl uses 255/190 too; PX4 needs a GCS sysid that
+    # differs from the vehicle's).
+    GCS_SYSID: int = 255
+    GCS_COMPID: int = 190
+    # Seconds CONNECT waits for the flight controller's first heartbeat. Radio links (T12, SiK)
+    # can take a few seconds after power-up.
+    MAVLINK_CONNECT_TIMEOUT_S: float = 6.0
+    # MAVLink component id of MAVROS on the Jetson (its default, 240). TAKEOFF/RTL sent over a
+    # radio link are addressed to it; PX4 forwards them when MAV_0/1_FORWARD are enabled.
+    COMPANION_COMPID: int = 240
+    # The Jetson's ROS master, for the live map, survivors, mission state, onboard camera and
+    # health. "auto" = the IP the MAVLink UDP/TCP packets come from (Wi-Fi via the Jetson),
+    # "" = never (MAVLink only), or an explicit URI such as http://192.168.144.50:11311.
+    DRONE_ROS_MASTER_URI: str = "auto"
+    # This laptop's IP as the Jetson must reach it (ROS_IP). Empty = the address of the interface
+    # that routes to the Jetson, detected automatically.
+    DRONE_ROS_IP: str = ""
+    # Onboard JPEG stream for the GCS (published by nidar_hardware/camera_publisher.py).
+    DRONE_CAMERA_TOPIC: str = "/nidar/gcs/camera/compressed"
+    # UDP port the "Built-in Simulator" connection listens on: PX4 SITL's GCS link.
+    SITL_MAVLINK_UDP_PORT: int = 14550
+
     # ROS 2 topics (used in SIMULATION/HARDWARE modes)
     ROS_ODOM_TOPIC: str = "/Odometry"
     ROS_MAP_TOPIC: str = "/projected_map"

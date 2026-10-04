@@ -4,6 +4,7 @@ import {
   Sliders, Cpu, Radio, ShieldCheck,
 } from 'lucide-react';
 import type { CameraFrame } from '@/types';
+import { apiUrl } from '@/services/api';
 
 // ─── Interfaces ───────────────────────────────────────────────
 
@@ -34,9 +35,13 @@ interface CameraViewProps {
 // ─── Component ────────────────────────────────────────────────
 
 export function CameraView({
+  mode,
   cameraFrame,
   className = '',
 }: CameraViewProps) {
+  // The backend serves the camera of the page asking: the simulated drone, or the real drone's
+  // onboard camera (ROS link) / the configured FC-T12 stream on the Hardware page.
+  const modeQuery = `?mode=${mode}`;
   const [diagnostics, setDiagnostics] = useState<FCCameraDiagnostics>({
     camera_source: 'FC / Jetson',
     fc_host: '192.168.1.100',
@@ -64,7 +69,7 @@ export function CameraView({
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/camera/status');
+        const res = await fetch(apiUrl(`/api/camera/status${modeQuery}`));
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
@@ -85,13 +90,13 @@ export function CameraView({
       isMounted = false;
       clearInterval(interval);
     };
-  }, [showConfig]);
+  }, [showConfig, modeQuery]);
 
   // Handle stream URL config save
   const handleSaveConfig = async () => {
     setIsUpdating(true);
     try {
-      const res = await fetch('http://localhost:8000/api/camera/config', {
+      const res = await fetch(apiUrl('/api/camera/config'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stream_url: inputUrl }),
@@ -112,7 +117,7 @@ export function CameraView({
   const handleReconnect = async () => {
     setReconnecting(true);
     try {
-      await fetch('http://localhost:8000/api/camera/control', {
+      await fetch(apiUrl('/api/camera/control'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reconnect', stream_url: inputUrl }),
@@ -309,7 +314,7 @@ export function CameraView({
   return (
     <div className={`relative overflow-hidden w-full h-full select-none font-mono ${className}`} style={{ background: '#0a0a0c' }}>
       <img
-        src={cameraFrame?.dataUrl || 'http://localhost:8000/api/camera/stream'}
+        src={cameraFrame?.dataUrl || apiUrl(`/api/camera/stream${modeQuery}`)}
         alt="FC / Jetson Camera Feed"
         className="w-full h-full object-contain bg-black/90"
       />

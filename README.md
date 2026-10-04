@@ -98,6 +98,22 @@ detections, survivors and health are live in the UI. See `catkin_ws/src/nidar_gc
 
 ---
 
+## Real drone (hardware deployment)
+
+The same stack flies the real drone: Jetson Orin Nano (onboard container) + PX4 + Livox Mid-360 +
+TFmini Plus + camera, commanded from the web GCS's **HARDWARE** page over the T12 / SiK radio, USB or
+Wi-Fi. Installation, wiring, sensor placement, the PX4 parameter file, connection types and tuning:
+**[hardware/DEPLOYMENT.md](hardware/DEPLOYMENT.md)**. All vehicle-specific settings and sensor
+placements live in one file, `catkin_ws/src/nidar_config/config/hardware.yaml`.
+
+```bash
+scripts/jetson_onboard.sh image && scripts/jetson_onboard.sh start && scripts/jetson_onboard.sh build
+scripts/jetson_onboard.sh bringup        # on the Jetson: brings the stack up, never arms
+catkin_ws/src/nidar_gcs/scripts/start_gcs.sh   # on the laptop: HARDWARE -> CONNECT DRONE -> TAKEOFF
+```
+
+---
+
 ## Repository Structure
 
 Split into one catkin package per subsystem (2026-10-02, see
@@ -108,16 +124,22 @@ the bring-up order.
 ```directory
 NIDAR/
 ├── docker/Dockerfile              # Ubuntu 20.04 + ROS Noetic + MAVROS + Livox-SDK + FUEL toolchain
+├── docker/Dockerfile.jetson       # onboard image for the Jetson (arm64): no Gazebo, + Livox-SDK2/driver2
+├── hardware/                      # DEPLOYMENT.md (install/wiring/tuning) + phase-by-phase checklists
 ├── scripts/
 │   ├── test_takeoff.sh            # Entry point: thin wrapper -> nidar_bringup/scripts/test_takeoff.sh
 │   ├── setup_env.sh               # ROS/Gazebo/PX4 env + model & plugin paths
 │   ├── docker_dev_start.sh
+│   ├── jetson_onboard.sh          # Jetson: check / image / start / build / bringup / stop
 │   └── ...                        # dev/diagnostic tools (pose_rig, spawn_vehicle_only, verify_*)
 ├── tools/flightlog/               # flight recorder, crash watchdog, run-bundle packer
 ├── catkin_ws/src/
 │   ├── nidar_msgs/                # Survivor.msg, SurvivorArray.msg (message-only)
 │   ├── nidar_config/              # SINGLE SOURCE OF TRUTH: mission_config.yaml, arena_grid.yaml,
-│   │                              #   flight_envelope_guard.yaml + apply_mission_config.py generator
+│   │                              #   flight_envelope_guard.yaml + apply_mission_config.py generator;
+│   │                              #   hardware.yaml + apply_hardware_config.py for the real drone
+│   ├── nidar_hardware/            # REAL DRONE ONLY: Mid-360 bridge, TFmini, camera, static TF,
+│   │                              #   mission_commander (TAKEOFF/RTL/LAND), PX4 params, hw launch
 │   ├── nidar_sim/                 # SIM ONLY: worlds/nidar_competition.world, models/ (arena, pad,
 │   │                              #   tfmini, VLP-16), launch/nidar_sim.launch (Gazebo + PX4 + MAVROS)
 │   ├── nidar_platform/            # relay_odometry.py (FAST-LIO -> EKF2), build_px4.sh
@@ -130,7 +152,7 @@ NIDAR/
 │   ├── nidar_map2d/               # /map_2d slicer, grid overlay + survivor tags, view_map2d.sh
 │   ├── nidar_qa/                  # verify_fix_parity.sh (pre-flight gate), analyze_exploration.py
 │   ├── nidar_bringup/             # test_takeoff.sh orchestrator, stop_sim.sh, mission_only.launch,
-│   │                              #   cpu_repin_loop.sh
+│   │                              #   cpu_repin_loop.sh; hw_bringup.sh / hw_stop.sh (real drone)
 │   ├── nidar_gcs/                 # web GCS: React UI + FastAPI backend + ROS bridge (start_gcs.sh)
 │   ├── FAST_LIO/                  # LiDAR-inertial SLAM; publishes /Fast_LIO/odometry
 │   ├── fuel/                      # FUEL exploration planner (+ uav_simulator/Utils/quadrotor_msgs)

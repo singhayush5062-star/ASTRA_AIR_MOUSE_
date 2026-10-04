@@ -517,6 +517,9 @@ class EntryDetectionModuleNode:
         rospy.Subscriber('/cloud_registered', PointCloud2, self.cloud_cb)
         rospy.Subscriber('/exploration_completed', Bool, self.completed_cb)
         rospy.Subscriber('/sdf_map/coverage', Float64MultiArray, self.coverage_cb)
+        # Operator RTL (GCS RTL button via nidar_hardware/mission_commander.py, or the GCS bridge
+        # directly in the simulation). Handled like the mission-clock limit: never a PX4 AUTO.RTL.
+        rospy.Subscriber('/mission/return_request', String, self.return_request_cb)
 
         # Publishers
         self.pub_mission_state = rospy.Publisher('/edm/mission_state', String, queue_size=5)
@@ -612,6 +615,25 @@ class EntryDetectionModuleNode:
         if msg.data and self.state == MissionState.EXPLORATION:
             rospy.loginfo("[EDM] Exploration completed signal received! Transitioning to RETURN...")
             self.transition_to(MissionState.RETURN)
+
+    def return_request_cb(self, msg):
+        """Operator RTL: come home through the door and land on the pad, whatever the phase.
+
+        Same routes the mission clock already uses (see control_loop): in EXPLORATION, FUEL owns
+        /planning/pos_cmd, so it is asked to stop and RETURN follows its handover; during entry
+        nothing else commands, so RETURN starts at once; still over the pad, it just lands."""
+        reason = msg.data or 'operator request'
+        if self.state == MissionState.EXPLORATION:
+            self.request_end_of_exploration('operator RTL (%s)' % reason)
+        elif self.state in (MissionState.ENTRY_SEARCH, MissionState.ENTRY_CONFIRMATION):
+            rospy.logwarn("[EDM] operator RTL (%s) during entry; returning to the pad.", reason)
+            self.transition_to(MissionState.RETURN)
+        elif self.state == MissionState.TAKEOFF:
+            if self.is_armed:
+                rospy.logwarn("[EDM] operator RTL (%s) over the pad; landing.", reason)
+                self.transition_to(MissionState.LAND)
+        else:
+            rospy.loginfo("[EDM] operator RTL (%s) ignored: already in %s.", reason, self.state)
 
     def coverage_cb(self, msg):
         """Coverage-plateau completion trigger. See the block in __init__ for the rationale.

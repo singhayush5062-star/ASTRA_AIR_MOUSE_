@@ -14,3 +14,5 @@ pydantic-settings
 python-dotenv
 pyserial
 eval_type_backport
+# MAVLink link to the real drone (Hardware dashboard: T12 / SiK / USB / Wi-Fi UDP).
+pymavlink

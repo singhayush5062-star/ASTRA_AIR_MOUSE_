@@ -36,5 +36,16 @@ if python3 -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(
     exit 1
 fi
 
+# Real drone over a serial radio (T12 / SiK) or the FC's USB port: the two usual blockers.
+if [ "$(id -u)" != "0" ] && ! id -nG | grep -qw dialout; then
+    echo "[start_gcs] WARNING: $(id -un) is not in the dialout group -- serial ports will not open"
+    echo "            (sudo usermod -aG dialout \$USER, log out/in; in the dev container: recreate it)"
+fi
+if command -v systemctl > /dev/null 2>&1 && systemctl is-active --quiet ModemManager 2>/dev/null; then
+    echo "[start_gcs] WARNING: ModemManager is running and grabs new USB serial devices for a few"
+    echo "            seconds (sudo systemctl disable --now ModemManager)"
+fi
+
 echo "[start_gcs] NIDAR GCS on http://localhost:$PORT  (Ctrl-C to stop the GCS; the sim keeps running)"
+for ip in $(hostname -I 2>/dev/null); do echo "[start_gcs]   from another device: http://$ip:$PORT"; done
 exec python3 "$PKG_DIR/backend/run.py"

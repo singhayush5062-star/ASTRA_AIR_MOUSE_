@@ -19,6 +19,15 @@
   <arg name="coverage_report_enabled" default="true"/>
   <arg name="map_2d_enabled" default="true"/>
   <arg name="grid_visualizer_enabled" default="true"/>
+  <!-- Perception overrides for the real drone (defaults: the simulation, see detector.launch). -->
+  <arg name="camera_tf" default="true"/>
+  <arg name="model_path" default="$(find nidar_perception)/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt"/>
+  <arg name="rotate_180" default="true"/>
+  <arg name="device" default="auto"/>
+  <arg name="detect_hz" default="5.0"/>
+  <arg name="confidence_threshold" default="0.55"/>
+  <arg name="target_height_m" default="0.35"/>
+  <arg name="ground_truth_check" default="true"/>
 
   <include file="$(find nidar_mission)/launch/nidar_mission.launch">
     <arg name="config" value="$(arg config)"/>
@@ -31,6 +40,14 @@
     <arg name="config" value="$(arg config)"/>
     <arg name="grid_config" value="$(arg grid_config)"/>
     <arg name="detection_enabled" value="$(arg detection_enabled)"/>
+    <arg name="camera_tf" value="$(arg camera_tf)"/>
+    <arg name="model_path" value="$(arg model_path)"/>
+    <arg name="rotate_180" value="$(arg rotate_180)"/>
+    <arg name="device" value="$(arg device)"/>
+    <arg name="detect_hz" value="$(arg detect_hz)"/>
+    <arg name="confidence_threshold" value="$(arg confidence_threshold)"/>
+    <arg name="target_height_m" value="$(arg target_height_m)"/>
+    <arg name="ground_truth_check" value="$(arg ground_truth_check)"/>
   </include>
 
   <include file="$(find nidar_map2d)/launch/map2d.launch">

@@ -27,6 +27,20 @@ package, which brings the stack up in this order:
 | 8 | `nidar_bringup/launch/mission_only.launch` | mission FSM, coverage, detector, 2D map |
 | 9 | (inline) | arm, OFFBOARD, climb; then `nidar_mission/scripts/mission_telemetry_logger.py` |
 
+## Run on the real drone
+
+On the Jetson (inside the onboard container, see `hardware/DEPLOYMENT.md`):
+
+```bash
+catkin_ws/src/nidar_bringup/scripts/hw_bringup.sh    # or: scripts/jetson_onboard.sh bringup
+catkin_ws/src/nidar_bringup/scripts/hw_stop.sh       # refuses while armed
+```
+
+`hw_bringup.sh` checks the configuration and devices, then starts the same stack in the same order
+with `nidar_hardware/launch/hw_drivers.launch` (MAVROS, Mid-360, TFmini, camera, static TF) in
+place of `nidar_sim.launch`, and `nidar_hardware/launch/hw_mission.launch` (this package's
+`mission_only.launch` + the onboard mission commander). It never arms: TAKEOFF comes from the GCS.
+
 ## Package map
 
 | Package | Owns |
@@ -42,6 +56,7 @@ package, which brings the stack up in this order:
 | `nidar_perception` | camera TF chain, `survivor_detector.py`, model weights |
 | `nidar_map2d` | `/map_2d` slicer, grid overlay, `view_map2d.sh` |
 | `nidar_qa` | `verify_fix_parity.sh`, `analyze_exploration.py` |
+| `nidar_hardware` | real drone: sensor relays, static TF, mission commander, PX4 parameter file |
 | `nidar_bringup` | this package |
 
 Every package's maintainer is listed in its `package.xml`.

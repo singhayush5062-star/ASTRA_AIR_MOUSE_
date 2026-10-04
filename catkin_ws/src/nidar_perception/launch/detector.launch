@@ -9,6 +9,16 @@
   <arg name="config" default="$(find nidar_config)/config/mission_config.yaml"/>
   <arg name="grid_config" default="$(find nidar_config)/config/arena_grid.yaml"/>
   <arg name="detection_enabled" default="true"/>
+  <!-- Defaults are the simulation's. The real drone (nidar_hardware/launch/hw_mission.launch)
+       publishes its own camera TF (camera_tf:=false) and sets the rest from hardware.yaml. -->
+  <arg name="camera_tf" default="true"/>
+  <arg name="model_path" default="$(find nidar_perception)/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt"/>
+  <arg name="rotate_180" default="true"/>
+  <arg name="device" default="auto"/>
+  <arg name="detect_hz" default="5.0"/>
+  <arg name="confidence_threshold" default="0.55"/>
+  <arg name="target_height_m" default="0.35"/>
+  <arg name="ground_truth_check" default="true"/>
 
   <rosparam command="load" file="$(arg config)"/>
   <rosparam command="load" file="$(arg grid_config)"/>
@@ -28,10 +38,12 @@
        `rosrun tf view_frames`. static_transform_publisher args are (x y z yaw pitch roll
        parent child). Note that is YPR, NOT the SDF's RPY, so the yaw/pitch/roll below
        are re-ordered accordingly. -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_mount_tf"
-        args="0.0231 0.0043 -0.0518 -3.0737 -0.0015 3.1332 base_link camera_mount_link"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_tf"
-        args="0 0 0 -3.0715 -0.259724 0 camera_mount_link camera_link"/>
+  <group if="$(arg camera_tf)">
+    <node pkg="tf2_ros" type="static_transform_publisher" name="camera_mount_tf"
+          args="0.0231 0.0043 -0.0518 -3.0737 -0.0015 3.1332 base_link camera_mount_link"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_tf"
+          args="0 0 0 -3.0715 -0.259724 0 camera_mount_link camera_link"/>
+  </group>
 
   <!-- Phase 4 survivor detector. Subscribes to /camera/image_raw at 15 Hz, runs YOLO26s
        at 5 Hz (mission_config.yaml: nidar/detection/detect_hz), back-projects to the
@@ -48,13 +60,13 @@
     <!-- Weights ship inside this package. PyTorch best.pt with device=auto (CUDA when
          available) so inference runs on the GPU. YOLO26S_DRONE_PERSON_V1 replaced
          PERSON_DETECTION_MODEL_V3 (still in models/detection/ for comparison) on 2026-10-03. -->
-    <param name="model_path" value="$(find nidar_perception)/models/detection/YOLO26S_DRONE_PERSON_V1/best.pt"/>
+    <param name="model_path" value="$(arg model_path)"/>
     <!-- The sim camera is mounted rolled 180 deg and this model only finds upright people:
          YOLO sees the de-rotated frame, boxes come back in raw-image pixels. -->
-    <param name="rotate_180" value="true"/>
-    <param name="detect_hz" value="5.0"/>
-    <param name="confidence_threshold" value="0.55"/>
-    <param name="device" value="auto"/>
+    <param name="rotate_180" value="$(arg rotate_180)"/>
+    <param name="detect_hz" value="$(arg detect_hz)"/>
+    <param name="confidence_threshold" value="$(arg confidence_threshold)"/>
+    <param name="device" value="$(arg device)"/>
     <param name="association_radius" value="0.75"/>
     <param name="confirmation_threshold" value="3"/>
     <param name="stale_timeout_s" value="10.0"/>
@@ -62,7 +74,7 @@
     <!-- 4.3 localisation: aim the bbox CENTRE at a plane through the body centre (the raw image is
          upside-down, so the box bottom is the head, not the feet), and drop truncated / tiny boxes. See survivor_detector.py and
          PLANNING_DOCS/survivor_localisation_4_3_2026-10-02.md for the measurements. -->
-    <param name="target_height_m" value="0.35"/>
+    <param name="target_height_m" value="$(arg target_height_m)"/>
     <param name="border_margin_px" value="6"/>
     <param name="min_box_px" value="20"/>
     <param name="arena_margin_m" value="0.3"/>
@@ -71,6 +83,6 @@
     <param name="camera_info_topic" value="/camera/camera_info"/>
     <param name="output_topic" value="/survivors"/>
     <param name="marker_topic" value="/survivor_markers"/>
-    <param name="ground_truth_check" value="true"/>
+    <param name="ground_truth_check" value="$(arg ground_truth_check)"/>
   </node>
 </launch>

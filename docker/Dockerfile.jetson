@@ -1,0 +1,106 @@
+############################################################
+# NIDAR AirMouse — ONBOARD image for the Jetson Orin Nano (arm64)
+#
+# Runs the flight stack on the drone: MAVROS, Livox Mid-360 driver, FAST-LIO2, FUEL, the
+# flight envelope guard, the mission layer and the onboard mission commander. No Gazebo, no
+# PX4 SITL, no GUI. Built and started by scripts/jetson_onboard.sh.
+#
+# ROS Noetic needs Ubuntu 20.04 userspace; the Orin Nano Super ships JetPack 6 (Ubuntu 22.04),
+# so the stack lives in this container. Two bases (hardware/DEPLOYMENT.md §3):
+#
+#   ros:noetic-ros-base-focal         (default) any JetPack. Detector on the CPU (NCNN).
+#   nvcr.io/nvidia/l4t-base:r35.4.1   JetPack 5.1.x hosts only (CUDA in the container via
+#                                     --runtime nvidia); pass TORCH_WHEEL for GPU YOLO.
+############################################################
+ARG BASE_IMAGE=ros:noetic-ros-base-focal
+FROM ${BASE_IMAGE}
+
+# Optional NVIDIA PyTorch wheel for JetPack 5 (GPU detector), e.g.
+#   https://developer.download.nvidia.com/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
+ARG TORCH_WHEEL=""
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+SHELL ["/bin/bash", "-c"]
+
+############################################################
+# ROS apt source. The key shipped in older ros:noetic images has expired; drop whatever source
+# the base has BEFORE the first apt update, then add the current key.
+############################################################
+RUN rm -f /etc/apt/sources.list.d/ros1*.list /etc/apt/sources.list.d/ros-latest.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl gnupg2 lsb-release ca-certificates && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc \
+        | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros/ubuntu focal main" \
+        > /etc/apt/sources.list.d/ros1.list && \
+    rm -rf /var/lib/apt/lists/*
+
+############################################################
+# ROS + MAVROS + everything the onboard catkin packages build and run against
+############################################################
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-noetic-ros-base ros-noetic-mavros ros-noetic-mavros-extras ros-noetic-mavros-msgs \
+        ros-noetic-tf ros-noetic-tf2-ros ros-noetic-tf2-eigen ros-noetic-tf2-geometry-msgs \
+        ros-noetic-pcl-ros ros-noetic-pcl-conversions ros-noetic-cv-bridge \
+        ros-noetic-image-transport ros-noetic-compressed-image-transport \
+        ros-noetic-robot-state-publisher ros-noetic-visualization-msgs ros-noetic-nav-msgs \
+        ros-noetic-std-srvs ros-noetic-topic-tools ros-noetic-rosbag \
+        python3-catkin-tools python3-osrf-pycommon python3-pip python3-yaml python3-serial \
+        python3-numpy python3-opencv \
+        build-essential cmake git pkg-config \
+        libeigen3-dev libpcl-dev libopencv-dev libgoogle-glog-dev libgflags-dev \
+        libarmadillo-dev libdw-dev libsuitesparse-dev libyaml-cpp-dev libnlopt-dev \
+        libnlopt-cxx-dev libapr1-dev \
+        geographiclib-tools iputils-ping iproute2 net-tools psmisc htop nano v4l-utils linuxptp \
+        gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad gstreamer1.0-libav \
+    && rm -rf /var/lib/apt/lists/*
+
+# MAVROS aborts at start without the EGM96 geoid grid.
+RUN geographiclib-get-geoids egm96-5
+
+############################################################
+# Livox SDKs
+#   Livox-SDK (v1): only so the workspace's livox_ros_driver builds -- FAST-LIO uses its
+#                   CustomMsg type. The Mid-360 itself is not supported by v1.
+#   Livox-SDK2 + livox_ros_driver2: the Mid-360 driver, in its own workspace /opt/livox_ws
+#                   that the NIDAR workspace extends (scripts/jetson_onboard.sh build).
+############################################################
+RUN git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK.git /tmp/Livox-SDK && \
+    cd /tmp/Livox-SDK/build && cmake .. && make -j"$(nproc)" && make install && \
+    rm -rf /tmp/Livox-SDK && \
+    git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 && \
+    mkdir -p /tmp/Livox-SDK2/build && cd /tmp/Livox-SDK2/build && cmake .. && \
+    make -j"$(nproc)" && make install && rm -rf /tmp/Livox-SDK2 && ldconfig
+
+RUN mkdir -p /opt/livox_ws/src && \
+    git clone --depth 1 https://github.com/Livox-SDK/livox_ros_driver2.git \
+        /opt/livox_ws/src/livox_ros_driver2 && \
+    cd /opt/livox_ws/src/livox_ros_driver2 && \
+    source /opt/ros/noetic/setup.bash && ./build.sh ROS1
+
+############################################################
+# Survivor detector runtime (ultralytics; NCNN runs fast on the Orin's ARM cores)
+############################################################
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    if [ -n "${TORCH_WHEEL}" ]; then python3 -m pip install --no-cache-dir "${TORCH_WHEEL}"; fi && \
+    python3 -m pip install --no-cache-dir "ultralytics>=8.4.120,<8.5" ncnn
+
+############################################################
+# Developer user (same uid as the host user so files in the mounted repo stay theirs)
+############################################################
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid ${USER_GID} ${USERNAME} && \
+    useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} -G dialout,video ${USERNAME} && \
+    apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/* && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+RUN echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc && \
+    echo "source /opt/livox_ws/devel/setup.bash" >> ~/.bashrc && \
+    echo "[ -f ~/NIDAR/catkin_ws/devel/setup.bash ] && source ~/NIDAR/catkin_ws/devel/setup.bash" >> ~/.bashrc
+
+CMD ["/bin/bash"]
