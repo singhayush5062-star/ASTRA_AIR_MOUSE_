@@ -1,0 +1,91 @@
+############################################################
+# NIDAR AirMouse — GCS image (operator laptop)
+#
+# Only the ground station: FastAPI backend + the built web UI + the ROS client libraries the
+# backend's ROS bridge needs (Jetson map / survivors / camera / TAKEOFF-RTL, or the local SITL).
+# No Gazebo, no PX4, no catkin build of the flight stack. Built and run by scripts/gcs_docker.sh,
+# in its own container (nidar_gcs) next to -- never instead of -- the dev container ros_workspace.
+#
+# Build context: catkin_ws/src (see Dockerfile.gcs.dockerignore: only nidar_gcs + nidar_msgs).
+############################################################
+
+# ---------- web UI (Vite build) ----------
+FROM node:22-bookworm-slim AS ui
+WORKDIR /ui
+COPY nidar_gcs/frontend/package.json nidar_gcs/frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY nidar_gcs/frontend/ ./
+RUN npm run build
+
+# ---------- runtime: ROS Noetic (Ubuntu 20.04) ----------
+FROM ros:noetic-ros-base-focal
+ENV DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC
+SHELL ["/bin/bash", "-c"]
+
+# The ROS key shipped in older ros:noetic images has expired: replace it before the first update.
+RUN rm -f /etc/apt/sources.list.d/ros1*.list /etc/apt/sources.list.d/ros-latest.list && \
+    apt-get update && apt-get install -y --no-install-recommends curl gnupg2 ca-certificates && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc \
+        | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros/ubuntu focal main" \
+        > /etc/apt/sources.list.d/ros1.list && \
+    rm -rf /var/lib/apt/lists/*
+
+# What gcs_ros_bridge.py imports, plus the system numpy/OpenCV the backend uses (cv_bridge's).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-noetic-tf ros-noetic-tf2-ros ros-noetic-cv-bridge ros-noetic-mavros-msgs \
+        ros-noetic-std-srvs ros-noetic-gazebo-msgs ros-noetic-message-generation \
+        python3-pip python3-numpy python3-opencv python3-serial \
+        iproute2 iputils-ping hostname sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Backend Python packages in an isolated --target dir (as scripts/setup_gcs.sh does): only the
+# backend process puts it on sys.path, the ROS bridge subprocess keeps the plain ROS Python.
+# onnxruntime (camera inference on the Hardware page) is built against numpy >= 1.21; focal's
+# numpy is 1.17, so the backend gets its own newer numpy here. The system cv2 runs on it (numpy
+# is forward-compatible with modules built against an older version).
+ENV NIDAR_GCS_HOME=/opt/nidar_gcs
+COPY nidar_gcs/backend/requirements-runtime.txt /tmp/requirements-runtime.txt
+RUN python3 -m pip install --no-cache-dir --disable-pip-version-check \
+        --target "$NIDAR_GCS_HOME/pydeps" -r /tmp/requirements-runtime.txt "numpy<1.25" && \
+    (python3 -m pip install --no-cache-dir --disable-pip-version-check \
+        --target "$NIDAR_GCS_HOME/pydeps" onnxruntime "numpy<1.25" || true) && \
+    rm -f /tmp/requirements-runtime.txt
+
+# nidar_msgs (survivor messages) in a private workspace: the repo's catkin_ws/build and devel
+# belong to the dev container and are not touched.
+COPY nidar_msgs/ /opt/nidar_gcs_ws/src/nidar_msgs/
+RUN source /opt/ros/noetic/setup.bash && cd /opt/nidar_gcs_ws && \
+    catkin_make -DCMAKE_BUILD_TYPE=Release > /tmp/catkin.log 2>&1 || (cat /tmp/catkin.log; exit 1); \
+    rm -rf /opt/nidar_gcs_ws/build /tmp/catkin.log
+
+# The UI is baked into the image (rebuild the image after frontend changes); the backend code is
+# read from the bind-mounted repository, so backend edits only need a container restart.
+COPY --from=ui /ui/dist /opt/nidar_gcs/ui
+ENV FRONTEND_DIST=/opt/nidar_gcs/ui
+
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid ${USER_GID} ${USERNAME} 2>/dev/null || true && \
+    useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} -G dialout,video ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    echo "source /opt/nidar_gcs_ws/devel/setup.bash" >> /home/${USERNAME}/.bashrc
+
+COPY --chmod=755 <<'EOF' /usr/local/bin/nidar-gcs
+#!/bin/bash
+# Container entrypoint: ROS environment (+ nidar_msgs) -> GCS backend serving the UI.
+source /opt/nidar_gcs_ws/devel/setup.bash
+BACKEND="${NIDAR_REPO:-/home/developer/NIDAR}/catkin_ws/src/nidar_gcs/backend/run.py"
+if [ ! -f "$BACKEND" ]; then
+    echo "[nidar-gcs] $BACKEND not found: mount the repository at ${NIDAR_REPO:-/home/developer/NIDAR}"
+    exit 1
+fi
+echo "[nidar-gcs] GCS on http://localhost:${PORT:-8000}"
+for ip in $(hostname -I 2>/dev/null); do echo "[nidar-gcs]   from another device: http://$ip:${PORT:-8000}"; done
+exec python3 "$BACKEND"
+EOF
+
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+CMD ["nidar-gcs"]

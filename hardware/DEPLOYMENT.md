@@ -370,7 +370,26 @@ Re-load whenever the generator says the file changed. The file lists *why* each 
 ### 8.1 Install (once)
 
 The GCS needs **ROS Noetic** for the ROS link (map, survivors, onboard camera, TAKEOFF/RTL over
-Wi-Fi). Easiest: the repository's dev container.
+Wi-Fi). Two ways, both Docker:
+
+**A. Dedicated GCS container (recommended for the field laptop).** Its own image `nidar-gcs` and
+container `nidar_gcs`; it does not touch the dev container `ros_workspace` or its catkin build
+(the web UI and `nidar_msgs` are built inside the image). Needs only Docker on the host.
+
+```bash
+scripts/gcs_docker.sh image      # docker/Dockerfile.gcs -> image nidar-gcs (~5-10 min once)
+scripts/gcs_docker.sh start      # container nidar_gcs -> http://localhost:8000 -> HARDWARE
+scripts/gcs_docker.sh logs       # follow the GCS log;  restart | stop | shell | rm
+```
+
+It restarts with Docker (`--restart unless-stopped`), uses the host network (UDP 14550, ROS to the
+Jetson) and sees `/dev` with the `dialout` group (USB radios). Backend code and `backend/.env` are
+read from the repository: `restart` after editing them. After frontend changes: `image`, `rm`,
+`start`. Port 8000 already taken (a GCS running in `ros_workspace`)? `GCS_PORT=8001 scripts/gcs_docker.sh start`.
+The SIMULATION page's START button needs Gazebo and stays in the dev container; the Hardware page's
+SIMULATOR link connects to a SITL running there.
+
+**B. Inside the dev container**, next to the simulation:
 
 ```bash
 ./scripts/docker_dev_start.sh            # dev container (has ROS Noetic); --net=host, /dev, dialout
@@ -531,6 +550,7 @@ bias means `camera.mount`.
 | `catkin_ws/src/nidar_bringup/scripts/hw_bringup.sh`, `hw_stop.sh` | onboard orchestrator (never arms) / stop (refuses while armed) |
 | `catkin_ws/src/nidar_slam/config/fast_lio/nidar_hw.yaml` | generated FAST-LIO config for the Mid-360 |
 | `docker/Dockerfile.jetson`, `scripts/jetson_onboard.sh` | onboard image and helper (§3.3) |
+| `docker/Dockerfile.gcs`, `scripts/gcs_docker.sh` | GCS-only image and helper (§8.1 A) |
 | `catkin_ws/src/nidar_gcs/backend/app/services/mavlink_service.py`, `hardware_service.py`, `serial_ports.py` | GCS hardware link: MAVLink (serial/UDP/TCP), ROS link, commands, port discovery |
 | `catkin_ws/src/nidar_gcs/frontend/src/hooks/useHardwareBackend.ts` | Hardware page ← backend (telemetry, map, events) |
 

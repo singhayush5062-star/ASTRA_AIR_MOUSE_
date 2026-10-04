@@ -109,7 +109,8 @@ placements live in one file, `catkin_ws/src/nidar_config/config/hardware.yaml`.
 ```bash
 scripts/jetson_onboard.sh image && scripts/jetson_onboard.sh start && scripts/jetson_onboard.sh build
 scripts/jetson_onboard.sh bringup        # on the Jetson: brings the stack up, never arms
-catkin_ws/src/nidar_gcs/scripts/start_gcs.sh   # on the laptop: HARDWARE -> CONNECT DRONE -> TAKEOFF
+scripts/gcs_docker.sh start              # on the laptop: own GCS container -> http://localhost:8000
+                                         #   HARDWARE -> CONNECT DRONE -> TAKEOFF
 ```
 
 ---
@@ -125,12 +126,14 @@ the bring-up order.
 NIDAR/
 ├── docker/Dockerfile              # Ubuntu 20.04 + ROS Noetic + MAVROS + Livox-SDK + FUEL toolchain
 ├── docker/Dockerfile.jetson       # onboard image for the Jetson (arm64): no Gazebo, + Livox-SDK2/driver2
+├── docker/Dockerfile.gcs          # GCS-only image for the operator laptop (backend + UI + ROS client)
 ├── hardware/                      # DEPLOYMENT.md (install/wiring/tuning) + phase-by-phase checklists
 ├── scripts/
 │   ├── test_takeoff.sh            # Entry point: thin wrapper -> nidar_bringup/scripts/test_takeoff.sh
 │   ├── setup_env.sh               # ROS/Gazebo/PX4 env + model & plugin paths
 │   ├── docker_dev_start.sh
 │   ├── jetson_onboard.sh          # Jetson: check / image / start / build / bringup / stop
+│   ├── gcs_docker.sh              # laptop: GCS in its own container (image / start / logs / stop)
 │   └── ...                        # dev/diagnostic tools (pose_rig, spawn_vehicle_only, verify_*)
 ├── tools/flightlog/               # flight recorder, crash watchdog, run-bundle packer
 ├── catkin_ws/src/

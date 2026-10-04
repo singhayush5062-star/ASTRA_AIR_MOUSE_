@@ -1,0 +1,7 @@
+# Build context of Dockerfile.gcs is catkin_ws/src: send only what the image needs.
+*
+!nidar_gcs/frontend
+nidar_gcs/frontend/node_modules
+nidar_gcs/frontend/dist
+!nidar_gcs/backend/requirements-runtime.txt
+!nidar_msgs
