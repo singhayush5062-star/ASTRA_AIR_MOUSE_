@@ -40,8 +40,9 @@ cd ASTRA_AIR_MOUSE_
 scripts/pi4_onboard.sh setup                 # UART, docker/dialout groups, eth0 addresses (over Wi-Fi!)
 sudo reboot                                  # needed: UART overlay + group membership
 
-# ── C. DEV PC: copy the image to the Pi (after B: needs Docker + the docker group there) ──
-scripts/pi4_onboard.sh deploy <user>@<pi-ip> # e.g. pi@192.168.x.y (its Wi-Fi address)
+# ── C. get the image onto the Pi (after B: needs Docker + the docker group there) ──
+scripts/pi4_onboard.sh deploy <user>@<pi-ip> # from the DEV PC, e.g. pi@192.168.x.y (its Wi-Fi address)
+#   or, on the Pi, from the team registry (§5): docker login ghcr.io -u <github-user>; scripts/pi4_onboard.sh pull
 
 # ── D. PI 4: start and verify ────────────────────────────────────────────────── once ──
 cd ~/ASTRA_AIR_MOUSE_
@@ -201,6 +202,31 @@ scripts/pi4_onboard.sh export                     # -> nidar-onboard-pi4_<commit
   container) are unaffected.
 * The image records the commit it was built from. `scripts/pi4_onboard.sh status` (or `check`) on
   the Pi shows `image built from <sha>, repo at <sha>`.
+
+### Team registry (ghcr.io): pull instead of building
+
+The team does not need to build the image: it is published as a **private** package linked to this
+repository, `ghcr.io/singhayush5062-star/nidar-onboard-pi4` (tags: the commit it was built from,
+and `latest`).
+
+Access: the repository owner shares the package with the team (GitHub → Packages →
+`nidar-onboard-pi4` → Package settings → add the repo collaborators / give it the repository's
+access). Each person needs a GitHub token (Settings → Developer settings → Tokens (classic)) with
+**`read:packages`** (and **`write:packages`** to publish).
+
+```bash
+# publish (the person who built it, on the dev PC)
+docker login ghcr.io -u <github-user>        # password = the token (never commit or share it)
+scripts/pi4_onboard.sh push                  # -> :<commit> and :latest
+
+# use (on the Pi, instead of deploy/load)
+docker login ghcr.io -u <github-user>        # once per Pi
+scripts/pi4_onboard.sh pull                  # or: pull <commit>
+scripts/pi4_onboard.sh rm; scripts/pi4_onboard.sh start
+```
+
+The pull needs internet on the Pi (~1.3 GB). Without internet at the field, pull at home or use
+`deploy` / `export` + `load`.
 
 ### When to rebuild what
 
@@ -371,7 +397,7 @@ Move the onboard computer to a Pi 5 or a Jetson Orin Nano (same Docker approach,
 
 | Path | Role |
 |---|---|
-| `scripts/pi4_onboard.sh` | everything in this guide: `image`, `deploy`, `export`, `setup`, `check`, `load`, `start`, `bringup`, `stop`, `status`, `shell`, `autostart`, `rm` |
+| `scripts/pi4_onboard.sh` | everything in this guide: `image`, `deploy`, `export`, `push`, `pull`, `setup`, `check`, `load`, `start`, `bringup`, `stop`, `status`, `shell`, `autostart`, `rm` |
 | `docker/Dockerfile.jetson` | the arm64 base image (ROS, MAVROS, Livox, detector runtime), shared with the Jetson |
 | `docker/Dockerfile.pi4` (+ `.dockerignore`) | the Pi image: base + compiled workspace + entrypoint |
 | `catkin_ws/src/nidar_config/config/hardware.yaml` | all vehicle settings (this branch: Pi 4, Aeromind 6X, A8 mini) |

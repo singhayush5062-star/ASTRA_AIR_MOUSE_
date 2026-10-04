@@ -5,11 +5,13 @@
 #   scripts/pi4_onboard.sh image              build nidar-onboard-pi4 (2-4 h the first time)
 #   scripts/pi4_onboard.sh deploy <user@pi>   stream the image to the Pi over ssh (docker load)
 #   scripts/pi4_onboard.sh export [file]      or save it to a .tar.gz (USB stick / scp)
+#   scripts/pi4_onboard.sh push               or publish it to the team registry (ghcr.io, private)
 #
 # On the PI 4 (from the repo root, branch pi4_deployment):
 #   scripts/pi4_onboard.sh setup              one-time host setup: UART, groups, eth0 addresses (sudo)
 #   scripts/pi4_onboard.sh check              host checks: OS, UART, network, LiDAR/camera/GCS, heat
 #   scripts/pi4_onboard.sh load <file>        docker load an exported image
+#   scripts/pi4_onboard.sh pull [tag]         or pull it from the team registry (default: latest)
 #   scripts/pi4_onboard.sh start              create/start the container nidar_onboard
 #   scripts/pi4_onboard.sh bringup            start the flight stack (hw_bringup.sh) -- never arms
 #                                             (LIDAR=0 CAMERA=0 SKIP_PARITY=1 are passed through)
@@ -19,12 +21,14 @@
 #   scripts/pi4_onboard.sh autostart          install the systemd service (bringup at boot)
 #   scripts/pi4_onboard.sh rm                 remove the container (image and repo stay)
 #
-# Settings: catkin_ws/src/nidar_config/config/hardware.yaml. Env: IMAGE, CONTAINER, JOBS (image).
+# Settings: catkin_ws/src/nidar_config/config/hardware.yaml.
+# Env: IMAGE, CONTAINER, JOBS (image), REGISTRY (push/pull, default ghcr.io/singhayush5062-star).
 set -e
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE=${IMAGE:-nidar-onboard-pi4}
 BASE_IMAGE=${BASE_IMAGE:-nidar-onboard-pi4-base}
 CONTAINER=${CONTAINER:-nidar_onboard}
+REGISTRY=${REGISTRY:-ghcr.io/singhayush5062-star}
 IN_REPO=/home/developer/NIDAR
 HW_CFG="$REPO_ROOT/catkin_ws/src/nidar_config/config/hardware.yaml"
 
@@ -72,6 +76,17 @@ deploy)
     say "streaming $IMAGE to $2 (compressed, ~2-3 GB; several minutes over Wi-Fi)"
     docker save "$IMAGE" | gzip -1 | ssh "$2" 'gunzip | docker load'
     say "loaded on $2. There: git pull, then scripts/pi4_onboard.sh rm && scripts/pi4_onboard.sh start"
+    ;;
+push)
+    # Private package linked to the GitHub repo (the image's org.opencontainers.image.source
+    # label); needs `docker login ghcr.io` with a token that has write:packages.
+    SHA=$(image_sha); [ "$SHA" != none ] || die "image $IMAGE not built ($0 image)"
+    [ "$SHA" = "$(repo_sha)" ] || say "note: image built from $SHA, repo at $(repo_sha)"
+    for tag in "$SHA" latest; do
+        docker tag "$IMAGE" "$REGISTRY/$IMAGE:$tag"
+        docker push "$REGISTRY/$IMAGE:$tag" || die "push failed: docker login ghcr.io (token with write:packages)?"
+    done
+    say "pushed $REGISTRY/$IMAGE:{$SHA,latest}. On the Pi: $0 pull"
     ;;
 export)
     OUT=${2:-$PWD/${IMAGE}_$(image_sha).tar.gz}
@@ -165,6 +180,12 @@ check)
         echo "  temp=$(( $(cat /sys/class/thermal/thermal_zone0/temp) / 1000 ))'C"
     fi
     ;;
+pull)
+    docker pull --platform linux/arm64 "$REGISTRY/$IMAGE:${2:-latest}" \
+        || die "pull failed: docker login ghcr.io -u <github-user> (token with read:packages), and access to the package"
+    docker tag "$REGISTRY/$IMAGE:${2:-latest}" "$IMAGE"
+    say "image $IMAGE = $REGISTRY/$IMAGE:${2:-latest} (built from $(image_sha)). Next: $0 rm; $0 start"
+    ;;
 load)
     [ -f "${2:-}" ] || die "usage: $0 load <nidar-onboard-pi4_*.tar.gz>"
     gunzip -c "$2" | docker load
@@ -212,5 +233,5 @@ rm)
     docker rm -f "$CONTAINER" > /dev/null && say "removed $CONTAINER"
     ;;
 *)
-    sed -n '2,23p' "$0"; exit 1 ;;
+    sed -n '2,26p' "$0"; exit 1 ;;
 esac

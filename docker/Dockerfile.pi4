@@ -60,6 +60,11 @@ fi
 exec "$@"
 EOF
 
+# Links the ghcr.io package to the repository (access follows the repo's collaborators).
+LABEL org.opencontainers.image.source="https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_" \
+      org.opencontainers.image.description="NIDAR AirMouse onboard stack for the Raspberry Pi 4 (arm64)" \
+      org.opencontainers.image.revision="${GIT_SHA}"
+
 WORKDIR /home/developer/NIDAR
 ENTRYPOINT ["/usr/local/bin/nidar-pi4-entrypoint"]
 CMD ["sleep", "infinity"]
