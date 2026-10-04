@@ -8,6 +8,7 @@ import type {
   AirMouseBackendPayload,
 } from '@/types/airMouse';
 import { SensorMotionProcessor, type CursorState } from '@/utils/sensorProcessing';
+import { WS_BASE } from '@/services/api';
 
 const DEFAULT_SETTINGS: AirMouseSettings = {
   sensitivity: 8,
@@ -209,7 +210,7 @@ export function useAirMouse(autoStart = false) {
       return;
     }
 
-    const wsUrl = (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/ws') + '/hardware';
+    const wsUrl = `${WS_BASE}/hardware`;
     setConnectionState('CONNECTING');
     setConnectionError(null);
 

@@ -3,6 +3,7 @@ import {
   X, Zap, Radio, Wifi, Usb, Cpu, RotateCw, Check, AlertTriangle, Loader2, Navigation,
 } from 'lucide-react';
 import { useHardwareStore, type DroneConnectionConfig } from '@/store';
+import { apiUrl } from '@/services/api';
 
 interface ConnectDroneModalProps {
   isOpen: boolean;
@@ -58,7 +59,7 @@ export function ConnectDroneModal({ isOpen, onClose }: ConnectDroneModalProps) {
   const scanPorts = useCallback(async () => {
     setIsScanningPorts(true);
     try {
-      const res = await fetch('http://localhost:8000/api/hardware/ports');
+      const res = await fetch(apiUrl('/api/hardware/ports'));
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.ports)) {

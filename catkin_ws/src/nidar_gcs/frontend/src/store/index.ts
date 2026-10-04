@@ -4,6 +4,7 @@ import type {
   Survivor, SystemHealth, SubsystemHealth, OccupancyGrid, TrajectoryPoint,
   CameraFrame, SimulationConfig,
 } from '@/types';
+import { apiUrl } from '@/services/api';
 
 // ─── Defaults ─────────────────────────────────────────────────
 
@@ -170,6 +171,14 @@ export interface DroneConnectionConfig {
   force_connect?: boolean;
 }
 
+/** Operator commands the Hardware page sends to the real drone (POST /api/hardware/command). */
+export type DroneCommand = 'takeoff' | 'land' | 'rtl';
+
+export interface DroneCommandResult {
+  ok: boolean;
+  detail: string;
+}
+
 export interface HWState {
   hwConnectionState: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'DEGRADED' | 'ERROR';
   connectionError: string | null;
@@ -185,6 +194,9 @@ export interface HWState {
   trajectory: TrajectoryPoint[];
   events: MissionEvent[];
   emergencyAborted: boolean;
+  arena: ArenaInfo | null;
+  /** Command in flight to the drone (buttons show it), or null. */
+  commandPending: DroneCommand | null;
   setDrone: (d: Partial<DroneState>) => void;
   setMissionState: (s: MissionState) => void;
   setHealth: (h: Partial<SystemHealth>) => void;
@@ -192,11 +204,17 @@ export interface HWState {
   setCamera: (c: Partial<CameraFrame>) => void;
   setMap: (m: OccupancyGrid | null) => void;
   addTrajectoryPoint: (p: TrajectoryPoint) => void;
+  clearTrajectory: () => void;
   addSurvivor: (s: Survivor) => void;
+  setSurvivors: (s: Survivor[]) => void;
   addEvent: (e: MissionEvent) => void;
   setMissionTimer: (t: number) => void;
+  setMissionPhases: (p: MissionPhase[]) => void;
   setAutonomy: (a: Partial<AutonomyInfo>) => void;
-  triggerEmergencyAbort: () => void;
+  setArena: (a: ArenaInfo | null) => void;
+  setEmergencyAborted: (v: boolean) => void;
+  triggerEmergencyAbort: () => Promise<void>;
+  sendCommand: (cmd: DroneCommand) => Promise<DroneCommandResult>;
   advanceMissionPhase: () => void;
   connectDrone: (config?: DroneConnectionConfig) => Promise<boolean>;
   disconnectDrone: () => void;
@@ -225,6 +243,8 @@ export const useHardwareStore = create<HWState>()((set, get) => ({
   trajectory: [],
   events: [],
   emergencyAborted: false,
+  arena: null,
+  commandPending: null,
 
   setDrone: (d) => set(s => ({ drone: { ...s.drone, ...d } })),
   setMissionState: (missionState) => set({ missionState }),
@@ -232,19 +252,55 @@ export const useHardwareStore = create<HWState>()((set, get) => ({
   setSubsystemHealth: (k, h) => set(s => ({ health: { ...s.health, [k]: { ...s.health[k], ...h, lastUpdate: Date.now() } } })),
   setCamera: (c) => set(s => ({ camera: { ...s.camera, ...c } })),
   setMap: (map) => set({ map }),
-  addTrajectoryPoint: (p) => set(s => ({ trajectory: [...s.trajectory, p].slice(-500) })),
+  addTrajectoryPoint: (p) => set(s => ({ trajectory: [...s.trajectory, p].slice(-3000) })),
+  clearTrajectory: () => set({ trajectory: [] }),
   addSurvivor: (survivor) => set(s => ({ survivors: [...s.survivors.filter(x => x.id !== survivor.id), survivor] })),
+  setSurvivors: (survivors) => set({ survivors }),
   addEvent: (e) => set(s => ({ events: [e, ...s.events].slice(0, 200) })),
   setMissionTimer: (missionTimer) => set({ missionTimer }),
+  setMissionPhases: (missionPhases) => set({ missionPhases }),
   setAutonomy: (a) => set(s => ({ autonomy: { ...s.autonomy, ...a } })),
-  triggerEmergencyAbort: () => {
+  setArena: (arena) => set({ arena }),
+  setEmergencyAborted: (emergencyAborted) => set({ emergencyAborted }),
+  // EMERGENCY ABORT: PX4 AUTO.LAND on every link to the drone (backend: /api/hardware/abort).
+  // The backend puts the abort and its outcome on the event timeline.
+  triggerEmergencyAbort: async () => {
     set({ emergencyAborted: true, missionState: 'ABORT' });
-    get().addEvent({
-      id: `evt-ea-${Date.now()}`,
-      timestamp: Date.now(),
-      message: '!!! EMERGENCY ABORT TRIGGERED BY OPERATOR !!!',
-      level: 'ERROR',
-    });
+    try {
+      const res = await fetch(apiUrl('/api/hardware/abort'), { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      get().addEvent({
+        id: `ui-abort-${Date.now()}`,
+        timestamp: Date.now(),
+        message: `ABORT NOT DELIVERED: ${err.message || 'GCS backend unreachable'} — USE THE RC TRANSMITTER`,
+        level: 'ERROR',
+      });
+    }
+  },
+  sendCommand: async (cmd) => {
+    set({ commandPending: cmd });
+    try {
+      const res = await fetch(apiUrl('/api/hardware/command'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok && !!body.ok, detail: body.detail || `HTTP ${res.status}` };
+    } catch (err: any) {
+      const detail = err.message || 'GCS backend unreachable';
+      get().addEvent({
+        id: `ui-cmd-${Date.now()}`, timestamp: Date.now(), level: 'ERROR',
+        message: `${cmd.toUpperCase()} NOT SENT: ${detail}`,
+      });
+      return { ok: false, detail };
+    } finally {
+      set({ commandPending: null });
+    }
   },
   advanceMissionPhase: () => {
     const phases = [...get().missionPhases];
@@ -283,7 +339,7 @@ export const useHardwareStore = create<HWState>()((set, get) => ({
     });
 
     try {
-      const res = await fetch('http://localhost:8000/api/hardware/connect', {
+      const res = await fetch(apiUrl('/api/hardware/connect'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config || {}),
@@ -297,6 +353,7 @@ export const useHardwareStore = create<HWState>()((set, get) => ({
       const data = await res.json();
       if (data.connected) {
         setConnectionState('CONNECTED', null);
+        set({ emergencyAborted: false });
         if (config?.drone_name) {
           set(state => ({
             drone: {
@@ -338,6 +395,8 @@ export const useHardwareStore = create<HWState>()((set, get) => ({
   },
 
   disconnectDrone: () => {
+    // Close the backend's links too (the drone itself keeps flying its onboard mission).
+    fetch(apiUrl('/api/hardware/disconnect'), { method: 'POST' }).catch(() => { /* offline */ });
     set({
       hwConnectionState: 'DISCONNECTED',
       connectionError: null,

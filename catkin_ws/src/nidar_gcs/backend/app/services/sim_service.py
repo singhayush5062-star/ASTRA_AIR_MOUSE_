@@ -655,25 +655,5 @@ class SimulationService:
         }
 
     async def mjpeg(self) -> AsyncGenerator[bytes, None]:
-        self.link.camera_client(+1)
-        try:
-            last = -1
-            idle = 0.0
-            while True:
-                ev = self.link.frame_event
-                if self.link.frame_seq == last and ev is not None:
-                    try:
-                        await asyncio.wait_for(ev.wait(), 1.0)
-                    except asyncio.TimeoutError:
-                        idle += 1.0
-                        if idle > 10.0:
-                            return  # camera gone; the UI falls back to its offline panel
-                        continue
-                idle = 0.0
-                jpg = self.link.frame_jpeg
-                last = self.link.frame_seq
-                if jpg:
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                           + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
-        finally:
-            self.link.camera_client(-1)
+        async for chunk in self.link.mjpeg():
+            yield chunk

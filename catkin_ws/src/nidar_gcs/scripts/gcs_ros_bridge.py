@@ -24,7 +24,15 @@ Output messages (field "type"):
   ack         result of a command
 
 Commands: {"cmd": "camera", "enable": bool} | {"cmd": "pause"} | {"cmd": "unpause"} |
-          {"cmd": "land"}
+          {"cmd": "land"} | {"cmd": "takeoff"} | {"cmd": "rtl"}
+
+Profiles (NIDAR_GCS_PROFILE):
+  sim       (default) the simulation on this machine: every topic is local, so liveness is
+            watched on the raw sensor topics and the raw camera image is encoded here.
+  hardware  the real drone's master over Wi-Fi. Nothing heavy crosses the radio: liveness comes
+            from the onboard commander's /nidar/onboard/status summary, the camera from the
+            throttled JPEG topic NIDAR_GCS_CAMERA_TOPIC (nidar_hardware camera_publisher.py),
+            and no Gazebo services are polled.
 """
 import base64
 import json
@@ -80,8 +88,9 @@ from mavros_msgs.msg import State  # noqa: E402
 from mavros_msgs.srv import SetMode  # noqa: E402
 from nav_msgs.msg import OccupancyGrid  # noqa: E402
 from rosgraph_msgs.msg import Log  # noqa: E402
-from sensor_msgs.msg import BatteryState, Image  # noqa: E402
+from sensor_msgs.msg import BatteryState, CompressedImage, Image  # noqa: E402
 from std_msgs.msg import Bool, Float64MultiArray, String  # noqa: E402
+from std_srvs.srv import Trigger  # noqa: E402
 
 try:
     from nidar_msgs.msg import SurvivorArray
@@ -105,6 +114,13 @@ INFO_PATTERNS = ('[EDM] State Transition', '[EDM] DESCEND', '[EDM] LAND', '[EDM]
                  'FCU: ', '[detector] Phase 4', 'exploration completed', 'Exploration completed')
 # Nodes whose warnings are expected chatter rather than operator information.
 QUIET_NODES = ('/gazebo', '/gazebo_gui', '/rosout', '/rviz')
+
+
+PROFILE = os.environ.get('NIDAR_GCS_PROFILE', 'sim')
+HARDWARE = PROFILE == 'hardware'
+CAMERA_TOPIC = os.environ.get('NIDAR_GCS_CAMERA_TOPIC', '/nidar/gcs/camera/compressed')
+# Onboard mission commander (nidar_hardware/scripts/mission_commander.py) services.
+CMD_SERVICES = {'takeoff': '/nidar/cmd/takeoff', 'rtl': '/nidar/cmd/rtl', 'land': '/nidar/cmd/land'}
 
 
 # Frontier marking is off by default: the edges of the floor wedges the LiDAR sees through a
@@ -194,6 +210,8 @@ class Bridge(object):
         self.det_times = []
         self.map_last_emit = 0.0
         self.map_pending = None
+        self.onboard = None               # last /nidar/onboard/status dict (hardware profile)
+        self.onboard_time = 0.0
 
         self.tf_buf = tf2_ros.Buffer(cache_time=rospy.Duration(10.0))
         self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
@@ -212,16 +230,24 @@ class Bridge(object):
         S('/map_2d', OccupancyGrid, self._map_cb, queue_size=1)
         S('/rosout_agg', Log, self._log_cb, queue_size=200)
         S('/survivor_detector/detections', String, self._det_cb, queue_size=1)
-        S('/camera/image_raw', Image, self._img_cb, queue_size=1, buff_size=2 ** 24)
         if SurvivorArray is not None:
             S('/survivors', SurvivorArray, self._surv_cb, queue_size=1)
         if Bspline is not None:
             S('/planning/bspline', Bspline, self._bspline_cb, queue_size=1)
-        # Liveness only: AnyMsg skips deserialisation, so watching the heavy topics is cheap.
-        for key, topic in (('imu', '/mavros/imu/data'), ('lidar', '/velodyne_points'),
-                           ('fastlio', '/Fast_LIO/odometry'), ('planner', '/planning/pos_cmd'),
-                           ('clock', '/clock'), ('guard', '/flight_envelope_guard/status')):
-            S(topic, rospy.AnyMsg, seen(key), queue_size=1)
+        # RTL fallback when no onboard commander runs (the simulation): the mission manager
+        # listens on this topic itself. Advertised up front so the connection exists in time.
+        self.pub_return = rospy.Publisher('/mission/return_request', String, queue_size=1)
+        if HARDWARE:
+            S('/nidar/onboard/status', String, self._onboard_cb, queue_size=1)
+            S(CAMERA_TOPIC, CompressedImage, self._jpeg_cb, queue_size=1, buff_size=2 ** 22)
+        else:
+            S('/camera/image_raw', Image, self._img_cb, queue_size=1, buff_size=2 ** 24)
+            # Liveness only: AnyMsg skips deserialisation, so watching the heavy topics is cheap
+            # (they are local in the simulation).
+            for key, topic in (('imu', '/mavros/imu/data'), ('lidar', '/velodyne_points'),
+                               ('fastlio', '/Fast_LIO/odometry'), ('planner', '/planning/pos_cmd'),
+                               ('clock', '/clock'), ('guard', '/flight_envelope_guard/status')):
+                S(topic, rospy.AnyMsg, seen(key), queue_size=1)
 
         threading.Thread(target=self._stdin_loop, daemon=True).start()
         threading.Thread(target=self._master_watch, daemon=True).start()
@@ -303,6 +329,51 @@ class Bridge(object):
                      Log.FATAL: 'FATAL'}.get(msg.level, 'INFO')
             emit('log', level=level, node=msg.name, msg=text[:400], stamp=msg.header.stamp.to_sec())
 
+    def _onboard_cb(self, msg):
+        try:
+            self.onboard = json.loads(msg.data)
+            self.onboard_time = time.time()
+        except ValueError:
+            pass
+
+    def _jpeg_cb(self, msg):
+        """Hardware profile: the onboard camera arrives already JPEG-encoded and throttled."""
+        now = time.time()
+        self.last['camera'] = now
+        self.cam_times = [t for t in self.cam_times if now - t < 2.0] + [now]
+        if not self.cam_enabled or now - self.cam_last_emit < self.cam_period:
+            return
+        self.cam_last_emit = now
+        try:
+            d = self.det
+            boxes = []
+            if d and now - self.last.get('yolo', 0) < 1.0:
+                boxes = [dict(b) for b in d.get('boxes', [])]
+            img = cv2.imdecode(np.frombuffer(msg.data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                return
+            h, w = img.shape[:2]
+            # Detector boxes are in full-resolution camera pixels; the GCS JPEG may be scaled.
+            sx = w / float((d or {}).get('width') or w)
+            sy = h / float((d or {}).get('height') or h)
+            for b in boxes:
+                x1, y1, x2, y2 = b['xyxy']
+                b['xyxy'] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+            if self.cam_flip:
+                img = cv2.rotate(img, cv2.ROTATE_180)
+                for b in boxes:
+                    b['xyxy'] = rotate_box_180(b['xyxy'], w, h)
+            hud = 'SRC: DRONE ONBOARD CAMERA | INFER: ONBOARD (JETSON) | FPS: %.1f | ' \
+                  'LATENCY: %.1fms | PERSONS: %d' % (self._rate(self.cam_times),
+                                                     (d or {}).get('latency_ms', 0.0), len(boxes))
+            draw_detections(img, boxes, hud)
+            ok, jpg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            if ok:
+                emit('frame', width=w, height=h,
+                     jpeg=base64.b64encode(jpg.tobytes()).decode('ascii'), boxes=len(boxes))
+        except Exception as e:  # never let a bad frame kill the bridge
+            rospy.logwarn_throttle(10.0, '[gcs_bridge] jpeg frame failed: %s', e)
+
     def _img_cb(self, msg):
         now = time.time()
         self.last['camera'] = now
@@ -358,16 +429,41 @@ class Bridge(object):
                     rospy.wait_for_service(srv, timeout=3.0)
                     rospy.ServiceProxy(srv, Empty)()
                     self.paused = (name == 'pause')
-                elif name == 'land':
-                    rospy.wait_for_service('/mavros/set_mode', timeout=3.0)
-                    res = rospy.ServiceProxy('/mavros/set_mode', SetMode)(custom_mode='AUTO.LAND')
-                    ok = bool(res.mode_sent)
+                elif name in CMD_SERVICES:
+                    ok, detail = self._mission_command(name)
                 else:
                     ok, detail = False, 'unknown command'
             except Exception as e:
                 ok, detail = False, str(e)
             emit('ack', cmd=name, ok=ok, detail=detail)
         os._exit(0)  # stdin closed: the backend is gone
+
+    def _mission_command(self, name):
+        """TAKEOFF / RTL / LAND through the onboard mission commander (pre-flight checks, the
+        tested arm -> OFFBOARD sequence). Without one (the simulation, where test_takeoff.sh
+        flies the vehicle), LAND goes straight to PX4 and RTL to the mission manager."""
+        srv = CMD_SERVICES[name]
+        try:
+            # An instant master lookup, not wait_for_service: in the simulation there is no
+            # commander, and an abort must not sit out a timeout first.
+            rosgraph.Master(rospy.get_name()).lookupService(srv)
+            have_commander = True
+        except Exception:
+            have_commander = False
+        if have_commander:
+            res = rospy.ServiceProxy(srv, Trigger)()
+            return bool(res.success), res.message
+        if name == 'land':
+            rospy.wait_for_service('/mavros/set_mode', timeout=3.0)
+            res = rospy.ServiceProxy('/mavros/set_mode', SetMode)(custom_mode='AUTO.LAND')
+            return bool(res.mode_sent), 'AUTO.LAND via MAVROS'
+        if name == 'rtl':
+            if self.pub_return.get_num_connections() == 0:
+                return False, 'no mission manager listening on /mission/return_request'
+            self.pub_return.publish(String(data='operator RTL (GCS)'))
+            return True, 'return requested from the mission manager'
+        return False, ('onboard mission commander not running (%s): start the drone stack with '
+                       'nidar_bringup/scripts/hw_bringup.sh' % srv)
 
     def _master_watch(self):
         misses = 0
@@ -440,6 +536,16 @@ class Bridge(object):
         mav = self.mav
         bat = self.battery
         age = {k: round(now - v, 2) for k, v in self.last.items()}
+        onboard = None
+        if self.onboard is not None:
+            # Ages measured onboard (hardware profile), aged further by the time since we heard.
+            extra = now - self.onboard_time
+            for k, v in (self.onboard.get('ages') or {}).items():
+                if v is not None and k not in ('camera', 'yolo'):
+                    age[k] = round(float(v) + extra, 2)
+            onboard = {'ready': bool(self.onboard.get('ready')),
+                       'reason': self.onboard.get('reason', ''),
+                       'stale': extra > 3.0}
         emit('state',
              position=pos, velocity=vel, attitude=att, goal=goal,
              local_position=None if lp is None else [round(lp.pose.position.x, 3),
@@ -456,7 +562,8 @@ class Bridge(object):
              detect_fps=round(self._rate(self.det_times), 1),
              detect_latency_ms=(self.det or {}).get('latency_ms'),
              detect_count=len((self.det or {}).get('boxes', [])) if age.get('yolo', 99) < 1.0 else 0,
-             paused=self.paused, sim_time=rospy.Time.now().to_sec())
+             paused=self.paused, sim_time=rospy.Time.now().to_sec(), onboard=onboard,
+             profile=PROFILE)
 
     def spin(self):
         last_pause_poll = 0.0
@@ -467,7 +574,7 @@ class Bridge(object):
                 m, self.map_pending = self.map_pending, None
                 self.map_last_emit = t0
                 emit('map', **m)
-            if t0 - last_pause_poll > 2.0:
+            if not HARDWARE and t0 - last_pause_poll > 2.0:
                 last_pause_poll = t0
                 self._poll_paused()
             time.sleep(max(0.0, 0.1 - (time.time() - t0)))

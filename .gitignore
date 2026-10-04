@@ -50,3 +50,6 @@ catkin_ws/src/nidar_perception/models/detection/**/__pycache__/
 graphify-out/
 graphify/
 PLANNING_DOCS/archive/
+
+# Jetson-only catkin profile (scripts/jetson_onboard.sh build) and onboard run logs
+catkin_ws/.catkin_tools/profiles/jetson/

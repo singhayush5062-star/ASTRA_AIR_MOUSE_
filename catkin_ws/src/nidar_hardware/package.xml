@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>nidar_hardware</name>
+  <version>0.1.0</version>
+  <description>
+    The real drone (Jetson Orin Nano + PX4 + Livox Mid-360 + TFmini Plus + camera): sensor
+    drivers and relays that give the NIDAR stack the same topics the simulation provides
+    (/nidar/livox/*, /tfmini/range, /camera/*), the vehicle's static TF from
+    nidar_config/config/hardware.yaml, and the onboard mission commander behind the GCS's
+    TAKEOFF / RTL / LAND. Started by nidar_bringup/scripts/hw_bringup.sh. Simulation never uses it.
+    Needs livox_ros_driver2 (built separately against Livox-SDK2, see hardware/DEPLOYMENT.md);
+    it is not declared below so the simulation workspace builds without it.
+  </description>
+
+  <maintainer email="singhayush5062@gmail.com">Ayush Singh</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>mavros</exec_depend>
+  <exec_depend>mavros_msgs</exec_depend>
+  <!-- FAST-LIO's Livox message type (livox_bridge.py republishes driver2 scans as it) -->
+  <exec_depend>livox_ros_driver</exec_depend>
+  <exec_depend>nidar_msgs</exec_depend>
+  <exec_depend>nidar_config</exec_depend>
+  <exec_depend>nidar_bringup</exec_depend>
+</package>

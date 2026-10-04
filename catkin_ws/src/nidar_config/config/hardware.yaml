@@ -1,0 +1,155 @@
+# =============================================================================
+# NIDAR AirMouse - REAL DRONE configuration (Jetson Orin Nano + PX4 + Mid-360 + TFmini Plus)
+# =============================================================================
+# The simulation never reads this file. mission_config.yaml stays the source of truth for the
+# ARENA and the MISSION (arena layout, launch pad, cruise altitude, speeds, guard limits); this
+# file holds what is specific to the physical vehicle: links, sensors and WHERE each sensor sits.
+#
+# Every placement below is relative to base_link = the flight controller's IMU (the PX4 body
+# origin), in ROS FLU axes: +x forward, +y LEFT, +z UP; metres and degrees. Measure on the built
+# frame with a tape and a level -- hardware/DEPLOYMENT.md §5 says how, parameter by parameter.
+#
+# After editing, regenerate the derived files and check the summary it prints:
+#     python3 catkin_ws/src/nidar_config/scripts/apply_hardware_config.py
+# which writes
+#     nidar_slam/config/fast_lio/nidar_hw.yaml        FAST-LIO (LiDAR/IMU extrinsics, TFmini)
+#     nidar_hardware/config/px4/nidar_hw.params       PX4 parameters (load in QGroundControl)
+#     nidar_hardware/config/livox/MID360_config.json  Livox driver network config
+# Everything else (static TFs, MAVROS URLs, camera, detector, commander) is read from this file
+# at launch time, so a change there only needs a restart of the onboard stack.
+# =============================================================================
+
+hardware:
+  vehicle_name: NIDAR-01
+
+  # ---------------------------------------------------------------------------
+  # NETWORK  (the drone's Wi-Fi / the T12 air-unit network shared with the GCS laptop)
+  # ---------------------------------------------------------------------------
+  network:
+    jetson_ip: 192.168.144.50    # the Jetson's address on the GCS network (ROS_IP onboard)
+    gcs_ip: 192.168.144.100      # the GCS laptop (MAVLink over Wi-Fi is sent here)
+
+  # ---------------------------------------------------------------------------
+  # FLIGHT CONTROLLER LINK  (Jetson <-> PX4, carried by MAVROS)
+  # ---------------------------------------------------------------------------
+  fcu:
+    # FC TELEM2 wired to the Jetson's 40-pin UART (pins 8 TX / 10 RX / 6 GND). On the Orin Nano
+    # dev kit that UART is /dev/ttyTHS1 on JetPack 6 (/dev/ttyTHS0 on some JetPack 5 images):
+    #     ls -l /dev/ttyTHS*
+    # Bench alternative: the FC's USB port -> /dev/ttyACM0:115200 (baud ignored on USB).
+    url: /dev/ttyTHS1:921600
+    telem2_baud: 921600           # -> PX4 SER_TEL2_BAUD; must equal the baud in `url`
+    # Forward the FC's MAVLink to the GCS laptop over Wi-Fi (UDP). The GCS connects with
+    # CONNECT DRONE -> UDP -> port 14550. "" disables it (radio-only operation).
+    gcs_url: udp://@192.168.144.100:14550
+    # The T12 / SiK data link on FC TELEM1 (the GCS's radio telemetry).
+    telem1_baud: 57600            # -> PX4 SER_TEL1_BAUD; must match the radio / T12 air unit
+    # Let TAKEOFF/RTL from the GCS reach the Jetson over the radio, and the Jetson's mission
+    # reports (STATUSTEXT) reach the GCS: PX4 MAV_0_FORWARD / MAV_1_FORWARD = 1. Costs ~1.5 kB/s
+    # of the radio link (the vision pose is forwarded too). false = commands need Wi-Fi (ROS).
+    mavlink_forwarding: true
+
+  # ---------------------------------------------------------------------------
+  # LIDAR  (Livox Mid-360, Ethernet)
+  # ---------------------------------------------------------------------------
+  lidar:
+    model: mid360
+    host_ip: 192.168.1.50         # the Jetson's Ethernet IP (static, same subnet as the LiDAR)
+    lidar_ip: 192.168.1.112       # Mid-360 factory IP is 192.168.1.1XX, XX = last 2 serial digits
+    # IMU FAST-LIO fuses with the scans:
+    #   livox  the Mid-360's built-in IMU, hardware-synchronised with the scans (recommended).
+    #          REQUIRES the LiDAR mounted upright and square to the body (roll = pitch = yaw = 0
+    #          below): FAST-LIO's world frame is the IMU frame at start-up.
+    #   fcu    PX4's IMU via MAVROS (/mavros/imu/data). Allows any mount angle, but needs the
+    #          LiDAR clock synchronised to the Jetson (time_sync: ptp) and a fast IMU stream.
+    imu_source: livox
+    # Optical centre of the Mid-360 (the centre of the bottom of the dome, Livox frame origin)
+    # relative to base_link. Mount it above the FC: x = y = 0 keeps the vision lever arm at zero.
+    mount: {x: 0.0, y: 0.0, z: 0.12, roll: 0.0, pitch: 0.0, yaw: 0.0}
+    # Returns closer than this are dropped: propeller tips, arms, landing gear. Must exceed the
+    # distance from the LiDAR to the farthest prop tip it can see.
+    blind: 0.30
+    det_range: 40.0               # metres; the arena diagonal is ~21 m
+    scan_rate_hz: 10
+    # How LiDAR timestamps get into ROS time:
+    #   restamp  the relay (livox_bridge.py) maps the Mid-360 clock onto ROS time (no setup)
+    #   ptp      the Mid-360 is PTP-synchronised to the Jetson (ptp4l), stamps used as-is
+    time_sync: restamp
+
+  # ---------------------------------------------------------------------------
+  # RANGEFINDER  (Benewake TFmini Plus, pointing straight down)
+  # ---------------------------------------------------------------------------
+  # Defines the ALTITUDE DATUM for the whole stack (FAST-LIO pins its Z to it, see
+  # mission_config.yaml rangefinder:). Mount it where the beam sees the floor, not a leg.
+  rangefinder:
+    # Where it is wired:
+    #   fcu     to a PX4 serial port (driver: SENS_TFMINI_CFG); the Jetson reads it from MAVROS
+    #   serial  to the Jetson (USB-UART or 40-pin UART); published to ROS and nothing to PX4
+    source: fcu
+    px4_port: GPS2                # fcu only: TELEM3 | TELEM4 | GPS2 (-> SENS_TFMINI_CFG)
+    mavros_topic: /mavros/distance_sensor/hrlv_ez4_pub   # fcu only: MAVROS's id-0 downward sensor
+    serial_port: /dev/ttyUSB0     # serial only
+    serial_baud: 115200           # serial only (TFmini Plus default)
+    # Beam origin (the lens face) relative to base_link. z is NEGATIVE: below the FC.
+    mount: {x: 0.0, y: 0.0, z: -0.06}
+    range_min: 0.10               # TFmini Plus: 0.1 - 12 m
+    range_max: 12.0
+    min_strength: 100             # below this signal strength a reading is unreliable
+
+  # ---------------------------------------------------------------------------
+  # CAMERA  (survivor detection, and the onboard video to the GCS)
+  # ---------------------------------------------------------------------------
+  camera:
+    enabled: true
+    # What to open:
+    #   /dev/video0                         USB / UVC camera, HDMI-USB capture dongle
+    #   rtsp://192.168.144.25:8554/main.264 IP camera (SIYI A8 mini default stream)
+    #   gst:nvarguscamerasrc ! ...          CSI camera through GStreamer (L4T image only)
+    source: /dev/video0
+    width: 1280
+    height: 720
+    fps: 30                       # capture rate requested from the device
+    publish_fps: 10               # /camera/image_raw rate (the detector samples it)
+    # Intrinsics. Calibrate (hardware/DEPLOYMENT.md §6.4) and point this at the result
+    # (camera_calibration's ost.yaml); until then they are derived from horizontal_fov_deg.
+    calibration_file: ""
+    horizontal_fov_deg: 81.0
+    # Optical centre and look direction relative to base_link, ROS roll/pitch/yaw (degrees):
+    # pitch POSITIVE = lens tilted DOWN (ROS: +pitch turns +x towards -z), e.g. 15 = 15 deg down.
+    mount: {x: 0.08, y: 0.0, z: -0.03, roll: 0.0, pitch: 15.0, yaw: 0.0}
+    rotate_180: false             # true if the camera is mounted upside down
+    # Onboard video sent to the GCS over Wi-Fi (the detector always gets full resolution).
+    gcs_stream: {fps: 5, width: 640, jpeg_quality: 60}
+
+  # ---------------------------------------------------------------------------
+  # SURVIVOR DETECTION  (nidar_perception/survivor_detector.py on the Jetson)
+  # ---------------------------------------------------------------------------
+  perception:
+    # A directory = NCNN model (fast on the Jetson CPU); a .pt = PyTorch (needs the CUDA build
+    # of torch to be fast, see hardware/DEPLOYMENT.md §3.4).
+    # Export the newer model with nidar_hardware/scripts/export_detector.sh.
+    model: catkin_ws/src/nidar_perception/models/detection/PERSON_DETECTION_MODEL_V3/best_ncnn_model
+    device: auto                  # auto | cpu | cuda
+    detect_hz: 3.0
+    confidence_threshold: 0.55
+    target_height_m: 0.35         # height of a survivor's body centre above the floor
+
+  # ---------------------------------------------------------------------------
+  # ONBOARD MISSION COMMANDER  (TAKEOFF / RTL / LAND from the GCS)
+  # ---------------------------------------------------------------------------
+  commander:
+    min_battery_pct: 60           # refuse TAKEOFF below this
+    auto_rtl_battery_pct: 30      # in flight below this: mission RTL (once)
+    offboard_delay_s: 1.0         # AUTO.TAKEOFF -> arm -> wait -> OFFBOARD (same as the sim)
+    arm_attempts: 10
+
+  # ---------------------------------------------------------------------------
+  # PX4 TUNING THAT DEPENDS ON THIS VEHICLE  (-> nidar_hw.params)
+  # ---------------------------------------------------------------------------
+  px4:
+    ev_delay_ms: 60               # age of a FAST-LIO pose when PX4 gets it; tune from logs
+    mpc_thr_hover: 0.45           # hover throttle; PX4 refines it in flight (MPC_USE_HTE)
+    max_climb_speed: 1.0          # m/s, MPC_Z_VEL_MAX_UP
+    takeoff_speed: 0.8            # m/s, MPC_TKO_SPEED
+    land_speed: 0.5               # m/s, MPC_LAND_SPEED
+    max_xy_speed: 1.0             # m/s, MPC_XY_VEL_MAX (the planner flies 0.6)

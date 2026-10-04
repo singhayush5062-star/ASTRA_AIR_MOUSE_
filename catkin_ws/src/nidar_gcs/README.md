@@ -43,6 +43,37 @@ Stopping the GCS (Ctrl-C) never stops a running simulation, and a restarted GCS 
 Backend settings are in `backend/.env`: `SIM_GAZEBO_GUI=True` also opens the Gazebo window on
 START; `GCS_MOCK=True` serves the old synthetic data (UI work without ROS).
 
+## Hardware page (the real drone)
+
+**HARDWARE → CONNECT DRONE** attaches the GCS to the real drone; the full procedure (Jetson side,
+PX4 parameters, radios) is in `hardware/DEPLOYMENT.md` §8.
+
+| Connection | Use |
+|---|---|
+| SERIAL | T12 RC data link or SiK radio on FC TELEM1, or the FC's USB. **Scan Ports** lists the laptop's serial devices with what they are and flags *NO PERMISSION* / *IN USE by …*. |
+| UDP | Wi-Fi: MAVROS on the Jetson forwards MAVLink (`hardware.yaml fcu.gcs_url`) to port 14550. |
+| TCP | a MAVLink TCP server (mavlink-router, SITL). |
+| SIMULATOR | the NIDAR SITL on this machine (PX4's GCS port 14550 + the local ROS master): the Hardware page against the simulation. |
+
+CONNECT succeeds only when a flight-controller heartbeat arrives; otherwise the dialog shows the
+reason (permissions, port busy, no data, wrong baud, ...). On top of MAVLink the backend attaches to
+the Jetson's ROS master (`DRONE_ROS_MASTER_URI` in `backend/.env`; `auto` = the IP the UDP MAVLink
+comes from) for the live map, survivors, mission state, onboard camera and health. With only a
+radio, mission state and survivors still arrive as the onboard commander's STATUSTEXT reports.
+
+**TAKEOFF** (two presses) starts the autonomous mission through the onboard mission commander
+(pre-flight checks, AUTO.TAKEOFF → arm → OFFBOARD); **RTL** makes the mission fly back out of the
+arena to the pad; **LAND** is PX4 AUTO.LAND; **EMERGENCY ABORT** sends AUTO.LAND on every link.
+
+| Endpoint | |
+|---|---|
+| `GET /api/hardware/ports` | serial port scan |
+| `POST /api/hardware/connect`, `/disconnect` | open / close the links |
+| `GET /api/hardware/status`, `/map`, `/arena` | snapshot, live map, arena geometry |
+| `POST /api/hardware/command` `{"command": "takeoff"\|"land"\|"rtl"\|"abort"}`, `POST /api/hardware/abort` | commands |
+| `WS /api/ws/hardware`, `/api/ws/hardware/map`, `/api/ws/hardware/events` | telemetry 10 Hz, map, event timeline |
+| `GET /api/camera/{status,stream}?mode=hardware` | the drone's onboard camera (or the configured FC/T12 stream) |
+
 ## How it works
 
 ```
@@ -105,12 +136,28 @@ The upstream look is kept. Changes, all reviewable with
 * `services/websocket.ts` — `ManagedWebSocket` exported.
 * `styles/globals.css` — fonts bundled instead of fetched (same fonts and weights).
 
+* `pages/Hardware/index.tsx` (2026-10-04) — data from `useHardwareBackend` (it never subscribed to
+  anything before, so a connected drone showed no data); TAKEOFF / RTL / LAND buttons above the
+  existing EMERGENCY ABORT, in the same style; the map gets the arena grid and entry marker like the
+  Simulation page.
+* `store/index.ts` (2026-10-04) — the hardware abort, disconnect and commands reach the backend
+  (abort only changed local state before).
+* `services/api.ts` (new) — one backend address for every call: the page's own origin when served
+  by the backend, so the UI also works when opened from another computer (several components had
+  `http://localhost:8000` hardcoded). `CameraView` passes its `mode`, so the Hardware page shows the
+  drone's camera and the Simulation page the simulated one.
+
 `components/simulation/Sim3DView.tsx` is unchanged and no longer used by the Simulation page.
 * backend: real simulation service instead of `MockDataProvider` (kept for `GCS_MOCK=True`);
-  Python 3.8 compatible; serves the built UI. The Hardware routes are untouched.
+  Python 3.8 compatible; serves the built UI. Hardware routes (2026-10-04): a real MAVLink link
+  (`mavlink_service.py`) and `hardware_service.py` replace the placeholder that reported any serial
+  port or UDP port as "connected" and served fixed telemetry.
 
 ## Tests
 
 ```bash
-python3 -m unittest discover -s catkin_ws/src/nidar_gcs/backend/tests -v
+cd catkin_ws/src/nidar_gcs/backend && python3 -m unittest discover -s tests -v
 ```
+
+`test_mavlink_link.py` / `test_hardware_api.py` run the Hardware link and API against a fake PX4
+vehicle over UDP (`tests/fake_vehicle.py`); they need the backend deps (`setup_gcs.sh`), not ROS.

@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-import socket
-import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +27,9 @@ from app.models.telemetry import (
 from app.models.mission import MissionEvent, MissionInfo, AutonomyInfo
 from app.models.survivor import Survivor
 from app.models.map import MapMetadata
+from app.services.hardware_service import HardwareService
 from app.services.mock_provider import MockDataProvider
+from app.services.serial_ports import list_serial_ports
 from app.services.sim_service import SimulationService
 from app.services.vision_service import vision_service
 
@@ -40,125 +40,27 @@ from app.services.vision_service import vision_service
 # UI work on a machine without ROS.
 MOCK = settings.GCS_MOCK
 sim_provider = MockDataProvider() if MOCK else SimulationService()
-hardware_connected = False
-hardware_error: str | null = None
-connected_drone_config: dict[str, Any] = {
-    "drone_name": "Drone Alpha",
-    "sys_id": 1,
-    "home_lat": 28.6754,
-    "home_lon": 77.5029,
-    "connection_type": "serial",
-    "serial_port": "COM6",
-    "baud_rate": 57600,
-}
+# The Hardware dashboard is backed by the real drone: a MAVLink link (T12 / SiK / USB / Wi-Fi
+# UDP) plus, when reachable, the Jetson's ROS master. See app/services/hardware_service.py.
+hw = HardwareService()
 
 
 class ConnectRequest(BaseModel):
     connection_type: str = "serial"  # serial | udp | tcp | simulator
-    serial_port: str | None = None
+    serial_port: Optional[str] = None
     baud_rate: int = 57600
-    host: str = "127.0.0.1"
+    host: Optional[str] = None
     udp_port: int = 14550
     tcp_port: int = 5760
     drone_name: str = "Drone Alpha"
     sys_id: int = 1
-    home_lat: float | None = 28.6754
-    home_lon: float | None = 77.5029
+    home_lat: Optional[float] = 28.6754
+    home_lon: Optional[float] = 77.5029
     force_connect: bool = False
 
 
-def get_connected_serial_ports() -> list[dict[str, str]]:
-    """Retrieve connected serial COM ports with friendly descriptions."""
-    ports: list[dict[str, str]] = []
-    try:
-        import serial.tools.list_ports
-        for p in serial.tools.list_ports.comports():
-            ports.append({
-                "port": p.device,
-                "description": p.description or p.device,
-                "hwid": p.hwid or "",
-            })
-    except Exception:
-        pass
-
-    if not ports and sys.platform == "win32":
-        try:
-            import winreg
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\SERIALCOMM")
-            for i in range(100):
-                try:
-                    _, val_data, _ = winreg.EnumValue(key, i)
-                    if val_data:
-                        ports.append({
-                            "port": str(val_data),
-                            "description": f"Serial Device ({val_data})",
-                            "hwid": "",
-                        })
-                except OSError:
-                    break
-            winreg.CloseKey(key)
-        except Exception:
-            pass
-    return ports
-
-
-def check_real_hardware_availability(req: ConnectRequest | None = None) -> tuple[bool, str]:
-    """
-    Checks for the presence of physical drone hardware based on connection parameters.
-    """
-    if os.environ.get("NIDAR_HW_CONNECTED") == "1":
-        return True, "Verified via NIDAR_HW_CONNECTED hardware bridge"
-
-    if req and req.force_connect:
-        return True, f"Force connected to {req.serial_port or 'COM6'} (Hardware Bench Test Mode)"
-
-    ctype = (req.connection_type if req else "serial").lower()
-
-    if ctype == "serial":
-        ports = get_connected_serial_ports()
-        port_names = [p["port"].upper() for p in ports]
-        target = (req.serial_port.upper() if req and req.serial_port else (port_names[0] if port_names else ""))
-
-        if target and target in port_names:
-            matched = next(p for p in ports if p["port"].upper() == target)
-            return True, f"Connected to {matched['description']} @ {req.baud_rate if req else 57600} baud"
-        elif ports:
-            return True, f"Drone hardware detected on {ports[0]['description']}"
-        else:
-            return False, f"Serial port {target or 'COM'} not detected on host. Ensure USB/radio is connected."
-
-    elif ctype == "udp":
-        port = req.udp_port if req else 14550
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.2)
-        try:
-            s.bind(("0.0.0.0", port))
-            s.close()
-            return True, f"Listening for MAVLink UDP stream on port {port}"
-        except OSError:
-            s.close()
-            return True, f"MAVLink UDP telemetry active on port {port}"
-        except Exception as e:
-            s.close()
-            return False, f"UDP socket error on port {port}: {str(e)}"
-
-    elif ctype == "tcp":
-        host = req.host if req else "127.0.0.1"
-        port = req.tcp_port if req else 5760
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.4)
-        try:
-            s.connect((host, port))
-            s.close()
-            return True, f"Connected to TCP stream on {host}:{port}"
-        except Exception as e:
-            s.close()
-            return False, f"TCP connection to {host}:{port} refused: {str(e)}"
-
-    elif ctype == "simulator":
-        return True, "Connected to Built-in Simulator stream"
-
-    return True, "Hardware link verified"
+class CommandRequest(BaseModel):
+    command: str  # takeoff | land | rtl | abort
 
 
 # ─── Lifespan ────────────────────────────────────────────────
@@ -167,17 +69,23 @@ def check_real_hardware_availability(req: ConnectRequest | None = None) -> tuple
 async def lifespan(app: FastAPI):
     """Start background simulation telemetry and YOLO vision inference."""
     task = asyncio.create_task(sim_provider.run())
+    hw_task = asyncio.create_task(hw.run())
     try:
         vision_service.start_camera()
     except Exception as e:
         print(f"[Vision] Camera start failed: {e}")
     yield
     task.cancel()
+    hw_task.cancel()
     vision_service.stop_camera()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for t in (task, hw_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    # Close the drone links (MAVLink port, ROS bridge). The drone itself is unaffected: it flies
+    # its mission onboard, and a restarted GCS reconnects to it.
+    await hw.shutdown()
     # Stop only the ROS bridge. A running simulation is deliberately left up: restarting the
     # GCS must not crash a flight, and the next GCS instance re-attaches to it.
     if not MOCK:
@@ -212,7 +120,7 @@ async def health() -> dict[str, Any]:
 @app.get("/api/system/status")
 async def system_status() -> dict[str, Any]:
     return {
-        "hardware_connected": hardware_connected,
+        "hardware_connected": hw.connected,
         "simulation_running": sim_provider.get_state().get("sim_state") == "RUNNING",
         "timestamp": time.time(),
     }
@@ -222,111 +130,91 @@ async def system_status() -> dict[str, Any]:
 
 @app.get("/api/hardware/ports")
 async def get_hardware_ports() -> dict[str, Any]:
-    ports = get_connected_serial_ports()
-    return {"ports": ports, "count": len(ports)}
+    """Serial ports on THIS computer (the one running the backend): T12 / SiK radio dongles, the
+    FC's USB port, Jetson UARTs. Annotated with permission / in-use problems."""
+    loop = asyncio.get_event_loop()
+    ports = await loop.run_in_executor(None, list_serial_ports)
+    return {"ports": ports, "count": len(ports), "timestamp": time.time()}
+
+
+def _hardware_snapshot() -> dict[str, Any]:
+    state = hw.get_state()
+    return {
+        "connected": hw.connected,
+        "status": hw.state,
+        "error": hw.error,
+        "drone": state["drone"].model_dump(),
+        "health": {k: v.model_dump() for k, v in state["health"].items()},
+        "mission_state": state["mission_state"],
+        "mission_timer": state["mission_timer"],
+        "mission_phases": state["mission_phases"],
+        "autonomy": state["autonomy"].model_dump(),
+        "survivors": [s.model_dump() for s in state["survivors"]],
+        "link": state["link"],
+        "config": hw.config,
+        "timestamp": time.time(),
+    }
 
 
 @app.get("/api/hardware")
 @app.get("/api/hardware/status")
 async def get_hardware_status() -> dict[str, Any]:
-    drone_name = connected_drone_config.get("drone_name", "Drone Alpha")
-    if not hardware_connected:
-        return {
-            "connected": False,
-            "status": "DISCONNECTED",
-            "drone": DroneState(
-                id=drone_name,
-                mode="--",
-                connectionStatus=ConnectionStatus.DISCONNECTED,
-            ).model_dump(),
-            "health": SystemHealth().model_dump(),
-            "timestamp": time.time(),
-        }
-
-    # When connected, return real hardware data
-    return {
-        "connected": True,
-        "status": "CONNECTED",
-        "drone": DroneState(
-            id=drone_name,
-            mode="OFFBOARD",
-            connectionStatus=ConnectionStatus.CONNECTED,
-            position=Vec3(x=2.43, y=-1.21, z=1.50),
-            velocity=Vec3(x=0.45, y=-0.12, z=0.05),
-            attitude=Attitude(roll=0.02, pitch=-0.01, yaw=1.57),
-            battery=Battery(voltage=16.4, current=7.8, percentage=82.0),
-        ).model_dump(),
-        "health": {
-            "px4": {"name": "PX4 / APM", "status": "ONLINE", "lastUpdate": time.time()},
-            "ros2": {"name": "ROS 2", "status": "ONLINE", "lastUpdate": time.time()},
-            "fastlio2": {"name": "FAST-LIO2", "status": "TRACKING", "lastUpdate": time.time()},
-            "lidar": {"name": "LiDAR", "status": "ONLINE", "lastUpdate": time.time()},
-            "imu": {"name": "IMU", "status": "ONLINE", "lastUpdate": time.time()},
-            "camera": {"name": "Camera", "status": "ONLINE", "lastUpdate": time.time()},
-            "yolo": {"name": "YOLO", "status": "READY", "lastUpdate": time.time()},
-            "planner": {"name": "Planner", "status": "RUNNING", "lastUpdate": time.time()},
-        },
-        "config": connected_drone_config,
-        "timestamp": time.time(),
-    }
+    return _hardware_snapshot()
 
 
 @app.post("/api/hardware/connect")
-async def connect_hardware(req: ConnectRequest | None = None) -> dict[str, Any]:
-    global hardware_connected, hardware_error, connected_drone_config
+async def connect_hardware(req: Optional[ConnectRequest] = None) -> Any:
+    """Open the MAVLink link and wait for the flight controller's heartbeat; on success also
+    attach to the Jetson's ROS master when reachable. 503 with the reason otherwise."""
     if req is None:
         req = ConnectRequest()
-
-    connected_drone_config = {
-        "drone_name": req.drone_name or "Drone Alpha",
-        "sys_id": req.sys_id or 1,
-        "home_lat": req.home_lat or 28.6754,
-        "home_lon": req.home_lon or 77.5029,
-        "connection_type": req.connection_type,
-        "serial_port": req.serial_port,
-        "baud_rate": req.baud_rate,
-        "host": req.host,
-        "udp_port": req.udp_port,
-        "tcp_port": req.tcp_port,
-    }
-
-    is_avail, reason = check_real_hardware_availability(req)
-
-    if is_avail:
-        hardware_connected = True
-        hardware_error = None
-        return {
-            "connected": True,
-            "status": "CONNECTED",
-            "message": reason,
-            "config": connected_drone_config,
-            "timestamp": time.time(),
-        }
-    else:
-        hardware_connected = False
-        hardware_error = reason
-        return JSONResponse(
-            status_code=503,
-            content={
-                "connected": False,
-                "status": "ERROR",
-                "error": reason,
-                "timestamp": time.time(),
-            },
-        )
+    ok, message = await hw.connect(req.model_dump())
+    if ok:
+        return {"connected": True, "status": "CONNECTED", "message": message,
+                "config": hw.config, "timestamp": time.time()}
+    return JSONResponse(status_code=503, content={
+        "connected": False, "status": "ERROR", "error": message, "timestamp": time.time()})
 
 
 @app.post("/api/hardware/disconnect")
 async def disconnect_hardware() -> dict[str, Any]:
-    global hardware_connected, hardware_error
-    hardware_connected = False
-    hardware_error = None
-    return {
-        "connected": False,
-        "status": "DISCONNECTED",
-        "message": "Physical hardware disconnected by operator",
-        "timestamp": time.time(),
-    }
+    await hw.disconnect()
+    return {"connected": False, "status": "DISCONNECTED",
+            "message": "Drone links closed by operator (the drone keeps flying its mission)",
+            "timestamp": time.time()}
+
+
+@app.post("/api/hardware/command")
+async def hardware_command(req: CommandRequest) -> Any:
+    """TAKEOFF (start the autonomous mission), LAND (PX4 AUTO.LAND here), RTL (mission return
+    to the launch pad through the arena door), ABORT (AUTO.LAND on every link)."""
+    res = await hw.command(req.command)
+    body = {"command": req.command.lower(), "timestamp": time.time(), **res}
+    return body if res.get("ok") else JSONResponse(status_code=409, content=body)
+
+
+@app.post("/api/hardware/abort")
+async def hardware_abort() -> Any:
+    res = await hw.command("abort")
+    body = {"status": "ABORT_TRIGGERED" if res.get("ok") else "ABORT_FAILED",
+            "timestamp": time.time(), **res}
+    return body if res.get("ok") else JSONResponse(status_code=409, content=body)
+
+
+@app.get("/api/hardware/map")
+async def get_hardware_map() -> dict[str, Any]:
+    m = hw.get_map()
+    if m is None:
+        return {"meta": None, "data": [], "timestamp": time.time() * 1000.0}
+    return m
+
+
+@app.get("/api/hardware/arena")
+async def hardware_arena() -> dict[str, Any]:
+    """Same arena geometry as the simulation: the real arena is laid out per mission_config."""
+    if MOCK:
+        return await simulation_arena()
+    return sim_provider.arena_info
 
 
 # ─── Simulation Routes (/api/simulation/*) ───────────────────
@@ -422,6 +310,8 @@ class ConnectionManager:
         self.active: dict[str, list[WebSocket]] = {
             "simulation": [],
             "hardware": [],
+            "hardware_map": [],
+            "hardware_events": [],
             "telemetry": [],
             "map": [],
             "camera": [],
@@ -493,50 +383,62 @@ async def ws_simulation(ws: WebSocket):
 
 @app.websocket("/api/ws/hardware")
 async def ws_hardware(ws: WebSocket):
+    """Real-drone telemetry at 10 Hz. Same envelope as /api/ws/simulation (type "telemetry",
+    payload.drone, ...) so the AirMouse panel and the Hardware dashboard read it the same way."""
     await manager.connect(ws, "hardware")
     try:
         while True:
-            if not hardware_connected:
-                await ws.send_json({
-                    "type": "status",
-                    "connected": False,
-                    "payload": {
-                        "status": "DISCONNECTED",
-                        "drone": DroneState(mode="--", connectionStatus=ConnectionStatus.DISCONNECTED).model_dump(),
-                    },
-                    "timestamp": time.time(),
-                })
-                await asyncio.sleep(1.0)
-            else:
-                await ws.send_json({
-                    "type": "telemetry",
-                    "mode": "HARDWARE",
-                    "payload": {
-                        "drone": DroneState(
-                            id="NIDAR-01",
-                            mode="OFFBOARD",
-                            connectionStatus=ConnectionStatus.CONNECTED,
-                            position=Vec3(x=2.43, y=-1.21, z=1.50),
-                            velocity=Vec3(x=0.45, y=-0.12, z=0.05),
-                            attitude=Attitude(roll=0.02, pitch=-0.01, yaw=1.57),
-                            battery=Battery(voltage=16.4, current=7.8, percentage=82.0),
-                        ).model_dump(),
-                        "health": {
-                            "px4": {"name": "PX4", "status": "ONLINE"},
-                            "ros2": {"name": "ROS 2", "status": "ONLINE"},
-                            "fastlio2": {"name": "FAST-LIO2", "status": "TRACKING"},
-                            "lidar": {"name": "LiDAR", "status": "ONLINE"},
-                            "imu": {"name": "IMU", "status": "ONLINE"},
-                            "camera": {"name": "Camera", "status": "ONLINE"},
-                            "yolo": {"name": "YOLO", "status": "READY"},
-                            "planner": {"name": "Planner", "status": "RUNNING"},
-                        },
-                    },
-                    "timestamp": time.time(),
-                })
-                await asyncio.sleep(0.05)  # 20 Hz
+            snap = _hardware_snapshot()
+            await ws.send_json({
+                "type": "telemetry" if hw.connected else "status",
+                "mode": "HARDWARE",
+                "connected": hw.connected,
+                "payload": snap,
+                "timestamp": time.time(),
+            })
+            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         manager.disconnect(ws, "hardware")
+
+
+@app.websocket("/api/ws/hardware/map")
+async def ws_hardware_map(ws: WebSocket):
+    await manager.connect(ws, "hardware_map")
+    try:
+        last_sent: Any = -1
+        last_write = time.time()
+        while True:
+            m = hw.get_map()
+            stamp = None if m is None else m["timestamp"]
+            if stamp != last_sent:
+                last_sent, last_write = stamp, time.time()
+                await ws.send_json({"type": "map", "payload": m, "timestamp": time.time()})
+            elif time.time() - last_write > WS_HEARTBEAT_S:
+                last_write = time.time()
+                await ws.send_json({"type": "ping", "timestamp": time.time()})
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        manager.disconnect(ws, "hardware_map")
+
+
+@app.websocket("/api/ws/hardware/events")
+async def ws_hardware_events(ws: WebSocket):
+    await manager.connect(ws, "hardware_events")
+    last_seq = 0
+    last_write = time.time()
+    try:
+        while True:
+            for evt in hw.events_since(last_seq):
+                last_seq = int(evt.id.split("-")[1])
+                last_write = time.time()
+                await ws.send_json({"type": "event", "payload": evt.model_dump(),
+                                    "timestamp": time.time()})
+            if time.time() - last_write > WS_HEARTBEAT_S:
+                last_write = time.time()
+                await ws.send_json({"type": "ping", "timestamp": time.time()})
+            await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        manager.disconnect(ws, "hardware_events")
 
 
 @app.websocket("/api/ws/map")
@@ -656,14 +558,31 @@ async def ws_camera(ws: WebSocket):
 
 # ─── FC / Jetson Camera & Laptop Vision REST Endpoints ───────
 
+def _onboard_camera(mode: Optional[str]):
+    """The ROS-side camera the requesting page should show, if it is live.
+
+    mode=hardware: the real drone's onboard camera (Jetson, over the ROS link), unless the
+    operator configured an explicit FC/T12 stream URL that is delivering frames.
+    mode=simulation (or none): the simulated drone camera, as before."""
+    if MOCK:
+        return None
+    if mode == "hardware":
+        if vision_service.receiving_frames:
+            return None
+        return hw if hw.camera_live() else None
+    return sim_provider if sim_provider.camera_live() else None
+
+
 @app.get("/api/camera/stream")
-async def get_camera_stream():
+async def get_camera_stream(mode: Optional[str] = None):
     """Live MJPEG video stream from FC/Jetson with laptop-side YOLO26s annotations.
 
     While a simulation is running, this is the simulated drone camera instead, annotated with
-    the onboard detector's boxes (nidar_perception)."""
-    if not MOCK and sim_provider.camera_live():
-        return StreamingResponse(sim_provider.mjpeg(),
+    the onboard detector's boxes (nidar_perception); on the Hardware page (mode=hardware) it is
+    the real drone's onboard camera when the ROS link carries it."""
+    src = _onboard_camera(mode)
+    if src is not None:
+        return StreamingResponse(src.mjpeg(),
                                  media_type="multipart/x-mixed-replace; boundary=frame")
     if not vision_service.is_running or (not vision_service.receiving_frames and vision_service.latest_annotated_jpeg is None):
         return JSONResponse(
@@ -684,11 +603,12 @@ async def get_camera_stream():
 
 
 @app.get("/api/camera/status")
-async def get_camera_status() -> dict[str, Any]:
-    """Status metrics of the FC/Jetson camera link and Laptop YOLO model (or of the simulated
-    camera and the onboard detector while a simulation is running)."""
-    if not MOCK and sim_provider.camera_live():
-        return sim_provider.camera_status()
+async def get_camera_status(mode: Optional[str] = None) -> dict[str, Any]:
+    """Status metrics of the FC/Jetson camera link and Laptop YOLO model (or of the simulated /
+    onboard camera and the onboard detector while one is live)."""
+    src = _onboard_camera(mode)
+    if src is not None:
+        return src.camera_status()
     return vision_service.get_status()
 
 

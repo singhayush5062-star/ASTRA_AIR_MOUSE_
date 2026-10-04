@@ -1,0 +1,40 @@
+<launch>
+  <!-- The real drone's mission layer: the SAME nodes the simulation runs
+       (nidar_bringup/mission_only.launch: mission manager, coverage, detector, 2D map), with the
+       perception settings of the real camera, plus the onboard mission commander that turns the
+       GCS's TAKEOFF / RTL / LAND into actions. Started by hw_bringup.sh with values from
+       nidar_config/config/hardware.yaml. -->
+
+  <arg name="hw_config" default="$(find nidar_config)/config/hardware.yaml"/>
+  <arg name="model_path"/>
+  <arg name="rotate_180" default="false"/>
+  <arg name="device" default="auto"/>
+  <arg name="detect_hz" default="3.0"/>
+  <arg name="confidence_threshold" default="0.55"/>
+  <arg name="target_height_m" default="0.35"/>
+  <arg name="camera" default="true"/>
+  <arg name="imu_topic" default="/nidar/livox/imu"/>
+
+  <include file="$(find nidar_bringup)/launch/mission_only.launch">
+    <arg name="entry_enabled" value="true"/>
+    <arg name="detection_enabled" value="$(arg camera)"/>
+    <!-- hw_static_tf.py publishes base_link -> camera_link from hardware.yaml camera.mount -->
+    <arg name="camera_tf" value="false"/>
+    <arg name="model_path" value="$(arg model_path)"/>
+    <arg name="rotate_180" value="$(arg rotate_180)"/>
+    <arg name="device" value="$(arg device)"/>
+    <arg name="detect_hz" value="$(arg detect_hz)"/>
+    <arg name="confidence_threshold" value="$(arg confidence_threshold)"/>
+    <arg name="target_height_m" value="$(arg target_height_m)"/>
+    <!-- no /gazebo/model_states on the real drone -->
+    <arg name="ground_truth_check" value="false"/>
+  </include>
+
+  <!-- mission_only.launch loads mission_config.yaml; keep /hardware/... (commander limits) -->
+  <rosparam command="load" file="$(arg hw_config)"/>
+
+  <node pkg="nidar_hardware" type="mission_commander.py" name="mission_commander" output="screen"
+        respawn="true">
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+  </node>
+</launch>

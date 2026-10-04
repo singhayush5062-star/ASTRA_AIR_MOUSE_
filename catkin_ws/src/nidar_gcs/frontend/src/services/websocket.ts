@@ -6,7 +6,9 @@
  * When backend is unavailable, the frontend uses mock providers.
  */
 
-const BASE_WS = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/ws';
+import { WS_BASE } from './api';
+
+const BASE_WS = WS_BASE;
 
 type MessageHandler = (data: unknown) => void;
 

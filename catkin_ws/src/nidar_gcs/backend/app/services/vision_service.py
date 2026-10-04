@@ -14,7 +14,9 @@ Architecture:
                                                   Dashboard HUD
 
 IMPORTANT:
-  - The laptop webcam is NEVER used.
+  - The laptop webcam is NEVER used. A local capture device is opened only when the operator
+    sets the stream URL to it explicitly (/dev/videoN or v4l2:///dev/videoN): that is how the
+    video output of an RC ground unit (e.g. the T12) or an HDMI capture dongle arrives.
   - The FC / Jetson stream is the sole source of camera truth.
   - If FC camera is offline, the service enters OFFLINE/RECONNECTING state
     without feeding stale frames or falling back to local devices.
@@ -150,8 +152,18 @@ class VisionService:
                 self.cap = None
             print("[Vision] FC Camera receiver stopped.")
 
+    def _local_device(self) -> str | None:
+        """/dev/videoN path when the configured stream is an explicit local capture device."""
+        url = (self.stream_url or "").strip()
+        if url.startswith("v4l2://"):
+            url = url[len("v4l2://"):]
+        return url if url.startswith("/dev/video") else None
+
     def _is_stream_reachable(self) -> bool:
         """Fast non-blocking socket probe to verify FC/Jetson stream port is open."""
+        dev = self._local_device()
+        if dev is not None:
+            return os.path.exists(dev)
         try:
             import socket
             from urllib.parse import urlparse
@@ -176,7 +188,11 @@ class VisionService:
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;2000000"
 
         print(f"[Vision] Connecting to FC/Jetson stream: {self.stream_url}")
-        cap = cv2.VideoCapture(self.stream_url, cv2.CAP_FFMPEG)
+        dev = self._local_device()
+        if dev is not None:
+            cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
+        else:
+            cap = cv2.VideoCapture(self.stream_url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if cap.isOpened():

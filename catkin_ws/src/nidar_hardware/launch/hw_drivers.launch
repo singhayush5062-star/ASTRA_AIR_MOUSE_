@@ -1,0 +1,65 @@
+<launch>
+  <!-- The real drone's sensors and links: everything the simulation's nidar_sim.launch
+       (Gazebo + PX4 SITL + MAVROS) provides, from the physical hardware instead.
+
+         MAVROS            PX4 over the Jetson UART/USB; forwards MAVLink to the GCS (gcs_url)
+         livox driver2     Mid-360 -> /livox/lidar (CustomMsg) + /livox/imu
+         livox_bridge.py   -> /nidar/livox/{lidar,imu} on ROS time, FAST-LIO's message type
+         rangefinder       TFmini Plus -> /tfmini/range
+         camera            -> /camera/image_raw, /camera/camera_info, GCS JPEG stream
+         hw_static_tf      body/base_link/livox_frame/tfmini_link/camera_link
+
+       nidar_bringup/scripts/hw_bringup.sh starts this with the values from
+       nidar_config/config/hardware.yaml (roslaunch cannot read YAML into arguments). -->
+
+  <arg name="hw_config" default="$(find nidar_config)/config/hardware.yaml"/>
+  <arg name="fcu_url" default="/dev/ttyTHS1:921600"/>
+  <arg name="gcs_url" default=""/>
+  <arg name="lidar" default="true"/>
+  <arg name="time_sync" default="restamp"/>
+  <arg name="camera" default="true"/>
+
+  <!-- /hardware/... : mounts, sensor settings, commander limits -->
+  <rosparam command="load" file="$(arg hw_config)"/>
+
+  <!-- PX4 <-> ROS. Same plugin set and frames as the simulation (mavros px4.launch). -->
+  <include file="$(find mavros)/launch/px4.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+    <arg name="gcs_url" value="$(arg gcs_url)"/>
+    <arg name="tgt_system" value="1"/>
+    <arg name="tgt_component" value="1"/>
+    <arg name="respawn_mavros" value="true"/>
+  </include>
+
+  <group if="$(arg lidar)">
+    <!-- livox_ros_driver2 reads these from the GLOBAL namespace (as its own msg_MID360.launch
+         sets them). xfer_format 1 = Livox CustomMsg, the format FAST-LIO's Livox path reads. -->
+    <param name="xfer_format" value="1"/>
+    <param name="multi_topic" value="0"/>
+    <param name="data_src" value="0"/>
+    <param name="publish_freq" type="double" value="10.0"/>
+    <param name="output_data_type" value="0"/>
+    <param name="cmdline_str" type="string" value="100000000000000"/>
+    <param name="cmdline_file_path" type="string" value=""/>
+    <param name="user_config_path" type="string"
+           value="$(find nidar_hardware)/config/livox/MID360_config.json"/>
+    <param name="frame_id" type="string" value="livox_frame"/>
+    <param name="enable_lidar_bag" type="bool" value="false"/>
+    <param name="enable_imu_bag" type="bool" value="false"/>
+    <node pkg="livox_ros_driver2" type="livox_ros_driver2_node" name="livox_lidar_publisher2"
+          output="screen" respawn="true" respawn_delay="3"/>
+
+    <node pkg="nidar_hardware" type="livox_bridge.py" name="livox_bridge" output="screen"
+          respawn="true">
+      <param name="time_sync" value="$(arg time_sync)"/>
+    </node>
+  </group>
+
+  <node pkg="nidar_hardware" type="rangefinder_node.py" name="rangefinder" output="screen"
+        respawn="true" respawn_delay="2"/>
+
+  <node if="$(arg camera)" pkg="nidar_hardware" type="camera_publisher.py" name="camera"
+        output="screen" respawn="true" respawn_delay="2"/>
+
+  <node pkg="nidar_hardware" type="hw_static_tf.py" name="hw_static_tf" output="screen"/>
+</launch>

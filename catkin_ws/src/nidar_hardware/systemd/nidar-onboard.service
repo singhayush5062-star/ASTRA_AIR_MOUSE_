@@ -1,0 +1,24 @@
+# Optional: start the onboard flight stack when the Jetson boots (it never arms by itself).
+#   sed "s/@USER@/$USER/; s#@REPO@#$PWD#" catkin_ws/src/nidar_hardware/systemd/nidar-onboard.service \
+#       | sudo tee /etc/systemd/system/nidar-onboard.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nidar-onboard
+#   journalctl -u nidar-onboard -f          # follow it; per-process logs in logs/hw/<run>/
+# Stopping the service while the drone is ARMED is refused by hw_stop.sh: the stack keeps
+# running inside the container until the drone has landed.
+[Unit]
+Description=NIDAR AirMouse onboard flight stack (hw_bringup.sh in the nidar_onboard container)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+ExecStartPre=/usr/bin/docker start nidar_onboard
+ExecStart=@REPO@/scripts/jetson_onboard.sh bringup
+ExecStop=@REPO@/scripts/jetson_onboard.sh stop
+TimeoutStopSec=30
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

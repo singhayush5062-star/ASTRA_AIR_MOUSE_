@@ -42,6 +42,14 @@ echo "============================================================"
 echo "[3/3] Managing persistent NIDAR development container ($CONTAINER_NAME)..."
 echo "============================================================"
 if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    # The GCS (Hardware page) opens USB telemetry radios / the FC's USB port from inside this
+    # container. Containers created before /dev was bind-mounted only see devices that existed
+    # when they were created, and their user lacks the dialout group.
+    if ! docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$CONTAINER_NAME" | grep -qw "/dev"; then
+        echo "WARNING: '$CONTAINER_NAME' was created without /dev and the dialout group: USB radios / the"
+        echo "         FC plugged in later are invisible to the GCS. Recreate it once (the repo is a bind"
+        echo "         mount, nothing is lost):  docker rm -f $CONTAINER_NAME && $0"
+    fi
     IS_RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null || echo "false")
     if [ "$IS_RUNNING" = "true" ]; then
         echo "Container '$CONTAINER_NAME' is already running. Attaching interactive shell..."
@@ -63,6 +71,9 @@ else
         -e LIBGL_ALWAYS_SOFTWARE=0 \
         -e QT_X11_NO_MITSHM=1 \
         -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+        -v /dev:/dev \
+        --group-add dialout \
+        --group-add video \
         -v "$REPO_ROOT:/home/developer/NIDAR" \
         -w /home/developer/NIDAR \
         "$IMAGE_NAME" /bin/bash

@@ -16,6 +16,7 @@ import type {
   SystemHealthProvider,
 } from './types';
 import { useSimulationStore } from '@/store';
+import { API_BASE } from '@/services/api';
 
 export class SimulationProvider
   implements
@@ -28,7 +29,7 @@ export class SimulationProvider
 {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = API_BASE) {
     this.baseUrl = baseUrl;
   }
 
