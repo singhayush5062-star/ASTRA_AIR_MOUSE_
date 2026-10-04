@@ -4,7 +4,8 @@ Complete phase-by-phase hardware verification guide for the **ASTRA AirMouse** a
 
 > **How to install and configure** everything this checklist verifies (Jetson container, wiring,
 > sensor placement in `hardware.yaml`, the PX4 parameter file, GCS connection, tuning):
-> **[DEPLOYMENT.md](DEPLOYMENT.md)**. Bring the stack up with `scripts/jetson_onboard.sh bringup`.
+> **[DEPLOYMENT.md](DEPLOYMENT.md)**. Bring the stack up with `scripts/jetson_onboard.sh bringup`,
+> or on the **Raspberry Pi 4** with `scripts/pi4_onboard.sh bringup` (**[PI4_DEPLOYMENT.md](PI4_DEPLOYMENT.md)**).
 
 ---
 

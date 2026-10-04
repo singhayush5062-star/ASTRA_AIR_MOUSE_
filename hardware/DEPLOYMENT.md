@@ -7,6 +7,10 @@ Linux laptop over the **T12** RC/data link, a **SiK** radio, **USB**, or **Wi-Fi
 This guide is the companion of the bring-up checklist in [`hardware/README.md`](README.md): this file
 says *how to install and configure*, the checklist says *what must pass before the next step*.
 
+> **Raspberry Pi 4 as the onboard computer** (Aeromind 6X / PX4 v1.16.1, SIYI A8 mini, Skydroid T12):
+> follow **[PI4_DEPLOYMENT.md](PI4_DEPLOYMENT.md)** for the computer, Docker image, network and
+> start-up; §5 (sensor placement), §7 (PX4 parameters) and §10 (tuning) here still apply.
+
 > **The frame is not built yet.** Every placement value below is a placeholder in one file,
 > [`catkin_ws/src/nidar_config/config/hardware.yaml`](../catkin_ws/src/nidar_config/config/hardware.yaml).
 > When the frame exists: measure (§5.2), edit that file, run the generator (§5.4), reload the PX4
@@ -326,7 +330,8 @@ the simulation-trained thresholds are a starting point only.
 
 ### 7.1 Firmware, airframe, calibration (QGroundControl, FC on USB)
 
-1. Flash **PX4 v1.14** (the SITL in this repo is v1.14.3).
+1. Flash **PX4 v1.14 or newer**: the SITL in this repo is v1.14.3; the vehicle flies **v1.16.1**,
+   against which every parameter in `nidar_hw.params` was checked (names and values unchanged).
 2. Airframe: the closest match (e.g. *Holybro X500 V2*, or *Generic Quadcopter*), then set motor
    positions/directions in **Actuators** and run the motor test (**props off**).
 3. Calibrate accelerometer, gyro, level horizon, RC (T12), ESCs, power module (voltage + current).

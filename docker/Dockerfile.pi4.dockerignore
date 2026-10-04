@@ -1,0 +1,8 @@
+# Build context of Dockerfile.pi4 is the repository root: send only the onboard catkin sources.
+*
+!catkin_ws/src
+catkin_ws/src/nidar_gcs
+catkin_ws/src/nidar_sim
+catkin_ws/src/velodyne_simulator
+**/__pycache__
+**/*.pyc

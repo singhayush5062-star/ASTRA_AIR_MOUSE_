@@ -104,7 +104,8 @@ def derive(hw, mission):
     if float(lidar.get('blind', 0)) <= 0:
         raise ConfigError('lidar.blind must be > 0 (propeller/frame self-returns)')
     url = str(fcu.get('url', ''))
-    if ':' in url and url.startswith('/dev/ttyTHS'):
+    # Onboard UARTs wired to TELEM2 (Jetson ttyTHS*, Pi ttyAMA*/serial0); USB (ttyACM*) has no baud.
+    if ':' in url and url.startswith(('/dev/ttyTHS', '/dev/ttyAMA', '/dev/serial0', '/dev/ttyS')):
         baud = int(url.rsplit(':', 1)[1])
         if baud != int(fcu.get('telem2_baud', baud)):
             raise ConfigError('fcu.url baud %d != fcu.telem2_baud %s (PX4 SER_TEL2_BAUD)'
@@ -264,7 +265,8 @@ def render_params(hw, d):
     lines = ['# Onboard parameters for Vehicle 1',
              '#',
              '# %s' % GENERATED,
-             '# Stack: PX4 Pro (v1.14, matching simulation/PX4-Autopilot-v1.14.3)',
+             '# Stack: PX4 Pro. Names and values valid on v1.14 (simulation/PX4-Autopilot-v1.14.3)',
+             '# and checked against v1.16.1 (flown firmware); px4_fmu-v6x ports TELEM1/TELEM2/GPS2.',
              '# Vehicle: Multi-Rotor. Select the airframe and calibrate sensors/ESCs/RC in',
              '# QGroundControl FIRST, then load this file (it does not set geometry or tuning gains).',
              '#',

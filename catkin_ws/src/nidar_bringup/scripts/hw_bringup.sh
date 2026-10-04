@@ -72,6 +72,8 @@ RNG_SOURCE=$(hw "c['rangefinder']['source']")
 RNG_PORT=$(hw "c['rangefinder'].get('serial_port', '')")
 MODEL=$(hw "c['perception']['model']")
 [ "${MODEL:0:1}" = "/" ] || MODEL="$ROOT_DIR/$MODEL"
+FL_FILTER_NUM=$(hw "c['lidar'].get('fastlio', {}).get('point_filter_num', 4)")
+FL_FILTER_SIZE=$(hw "c['lidar'].get('fastlio', {}).get('filter_size', 0.5)")
 LIDAR_ARG=true; [ "${LIDAR:-1}" = "0" ] && LIDAR_ARG=false
 [ "${CAMERA:-1}" = "0" ] && CAM_ENABLED=false
 IMU_TOPIC=/nidar/livox/imu; [ "$IMU_SOURCE" = "fcu" ] && IMU_TOPIC=/mavros/imu/data
@@ -87,7 +89,7 @@ $(cat "$LOG_DIR/config_check.log")
   fix: python3 catkin_ws/src/nidar_config/scripts/apply_hardware_config.py, then reload the PX4 params if they changed"
 FCU_DEV=${FCU_URL%%:*}
 if [ "${FCU_DEV:0:5}" = "/dev/" ]; then
-    [ -e "$FCU_DEV" ] || die "flight controller port $FCU_DEV does not exist (ls -l /dev/ttyTHS* /dev/ttyACM*)"
+    [ -e "$FCU_DEV" ] || die "flight controller port $FCU_DEV does not exist (ls -l /dev/ttyAMA* /dev/ttyTHS* /dev/ttyACM*; Pi 4: dtoverlay=disable-bt)"
     [ -r "$FCU_DEV" ] && [ -w "$FCU_DEV" ] || die "no permission on $FCU_DEV (add the user to dialout, or run the container with --privileged)"
 fi
 if [ "$RNG_SOURCE" = "serial" ] && [ ! -e "$RNG_PORT" ]; then
@@ -97,7 +99,7 @@ if [ "$LIDAR_ARG" = "true" ]; then
     rospack find livox_ros_driver2 > /dev/null 2>&1 \
         || die "livox_ros_driver2 is not built (hardware/DEPLOYMENT.md §4.2), or run with LIDAR=0"
     ping -c 2 -W 1 "$LIDAR_IP" > /dev/null 2>&1 \
-        || die "Mid-360 at $LIDAR_IP does not answer ping: check power, the Ethernet cable and the Jetson's static IP ($(hw "c['lidar']['host_ip']"))"
+        || die "Mid-360 at $LIDAR_IP does not answer ping: check power, the Ethernet cable and the onboard computer's static IP ($(hw "c['lidar']['host_ip']"))"
 fi
 if [ "$CAM_ENABLED" = "true" ] && [ "${CAM_SOURCE:0:10}" = "/dev/video" ] && [ ! -e "$CAM_SOURCE" ]; then
     die "camera $CAM_SOURCE does not exist (v4l2-ctl --list-devices), or run with CAMERA=0"
@@ -115,7 +117,7 @@ fi
 if ip -4 addr 2>/dev/null | grep -q " $JETSON_IP/"; then
     export ROS_IP="$JETSON_IP"
 else
-    say "WARNING: $JETSON_IP is not on any interface; the GCS ROS link will not reach this Jetson (set hardware.yaml network.jetson_ip)"
+    say "WARNING: $JETSON_IP is not on any interface; the GCS ROS link will not reach this onboard computer (set hardware.yaml network.jetson_ip)"
 fi
 export ROS_MASTER_URI=http://localhost:11311
 unset ROS_HOSTNAME
@@ -147,7 +149,8 @@ wait_topic /nidar/livox/lidar 30 "Mid-360 scans"
 
 # ── 4. localisation: FAST-LIO -> PX4 EKF2 ─────────────────────────────────────────────────────
 start fast_lio roslaunch nidar_slam nidar_mapping.launch rviz:=false use_urdf:=false \
-    config:="$SRC/nidar_slam/config/fast_lio/nidar_hw.yaml"
+    config:="$SRC/nidar_slam/config/fast_lio/nidar_hw.yaml" \
+    point_filter_num:="$FL_FILTER_NUM" filter_size:="$FL_FILTER_SIZE"
 wait_topic /Fast_LIO/odometry 60 "FAST-LIO odometry"
 start relay_odometry "$SRC/nidar_platform/scripts/relay_odometry.py"
 say "waiting for PX4 to take the vision pose (EKF2 local position)..."

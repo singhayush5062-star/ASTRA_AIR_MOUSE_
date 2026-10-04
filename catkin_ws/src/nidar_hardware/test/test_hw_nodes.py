@@ -208,6 +208,16 @@ class HardwareConfigTest(unittest.TestCase):
         with self.assertRaises(ahc.ConfigError):
             ahc.derive(hw, self.mission)
 
+    def test_uart_baud_must_match_telem2(self):
+        for dev in ('/dev/ttyAMA0', '/dev/ttyTHS1'):   # Raspberry Pi 4, Jetson Orin
+            hw = copy.deepcopy(self.hw)
+            hw['fcu'].update(url='%s:460800' % dev, telem2_baud=921600)
+            with self.assertRaises(ahc.ConfigError, msg=dev):
+                ahc.derive(hw, self.mission)
+        hw = copy.deepcopy(self.hw)
+        hw['fcu'].update(url='/dev/ttyACM0:115200', telem2_baud=921600)   # USB: baud unused
+        ahc.derive(hw, self.mission)
+
     def test_px4_params_signs(self):
         hw = copy.deepcopy(self.hw)
         hw['rangefinder']['mount'] = {'x': 0.02, 'y': 0.03, 'z': -0.07}

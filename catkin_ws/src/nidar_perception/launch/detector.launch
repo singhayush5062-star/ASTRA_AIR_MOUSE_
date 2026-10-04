@@ -52,10 +52,12 @@
        when /gazebo/model_states is available.
 
        All private params here are mirrored from the loaded nidar/detection/* keys, but
-       set explicitly so a config typo does not silently fall back to the code default. -->
+       set explicitly so a config typo does not silently fall back to the code default.
+       launch-prefix: empty here (simulation); the arm64 onboard image sets NIDAR_DETECTOR_PREFIX
+       to preload torch's and ncnn's libgomp (docker/Dockerfile.jetson). -->
   <node if="$(arg detection_enabled)"
         pkg="nidar_perception" type="survivor_detector.py" name="survivor_detector"
-        output="screen">
+        output="screen" launch-prefix="$(optenv NIDAR_DETECTOR_PREFIX)">
     <param name="enabled" value="true"/>
     <!-- Weights ship inside this package. PyTorch best.pt with device=auto (CUDA when
          available) so inference runs on the GPU. YOLO26S_DRONE_PERSON_V1 replaced

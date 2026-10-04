@@ -7,15 +7,19 @@
          body -> base_link, comes from nidar_hardware/scripts/hw_static_tf.py). -->
     <arg name="config" default="$(find nidar_slam)/config/fast_lio/nidar_sim.yaml" />
     <arg name="use_urdf" default="true" />
+    <!-- CPU load. The real drone passes hardware.yaml lidar.fastlio (hw_bringup.sh); the
+         simulation keeps these defaults. -->
+    <arg name="point_filter_num" default="4" />
+    <arg name="filter_size" default="0.5" />
 
     <rosparam command="load" file="$(arg config)" />
 
     <!-- FAST-LIO Global parameters -->
     <param name="feature_extract_enable" type="bool" value="0"/>
-    <param name="point_filter_num" type="int" value="4"/>
+    <param name="point_filter_num" type="int" value="$(arg point_filter_num)"/>
     <param name="max_iteration" type="int" value="3" />
-    <param name="filter_size_surf" type="double" value="0.5" />
-    <param name="filter_size_map" type="double" value="0.5" />
+    <param name="filter_size_surf" type="double" value="$(arg filter_size)" />
+    <param name="filter_size_map" type="double" value="$(arg filter_size)" />
     <param name="cube_side_length" type="double" value="1000" />
     <param name="runtime_pos_log_enable" type="bool" value="0" />
 

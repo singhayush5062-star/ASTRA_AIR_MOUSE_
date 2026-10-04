@@ -53,3 +53,7 @@ PLANNING_DOCS/archive/
 
 # Jetson-only catkin profile (scripts/jetson_onboard.sh build) and onboard run logs
 catkin_ws/.catkin_tools/profiles/jetson/
+# Raspberry Pi 4: the container links catkin_ws/devel to the workspace in the image (a symlink,
+# which **/devel/ does not match); exported images (scripts/pi4_onboard.sh export)
+catkin_ws/devel
+nidar-onboard-pi4_*.tar.gz

@@ -69,10 +69,10 @@ RUN geographiclib-get-geoids egm96-5
 ############################################################
 RUN git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK.git /tmp/Livox-SDK && \
     cd /tmp/Livox-SDK/build && cmake .. && make -j"$(nproc)" && make install && \
-    rm -rf /tmp/Livox-SDK && \
+    cd / && rm -rf /tmp/Livox-SDK && \
     git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2 && \
     mkdir -p /tmp/Livox-SDK2/build && cd /tmp/Livox-SDK2/build && cmake .. && \
-    make -j"$(nproc)" && make install && rm -rf /tmp/Livox-SDK2 && ldconfig
+    make -j"$(nproc)" && make install && cd / && rm -rf /tmp/Livox-SDK2 && ldconfig
 
 RUN mkdir -p /opt/livox_ws/src && \
     git clone --depth 1 https://github.com/Livox-SDK/livox_ros_driver2.git \
@@ -82,10 +82,26 @@ RUN mkdir -p /opt/livox_ws/src && \
 
 ############################################################
 # Survivor detector runtime (ultralytics; NCNN runs fast on the Orin's ARM cores)
+# opencv-python < 5: ultralytics would pull OpenCV 5, whose type codes differ from the OpenCV 4
+# that ROS cv_bridge is built against (CV_8UC3 = 64 vs 16) -> survivor_detector.py's
+# cv_bridge conversion fails with "KeyError: 16" on the first camera frame.
 ############################################################
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     if [ -n "${TORCH_WHEEL}" ]; then python3 -m pip install --no-cache-dir "${TORCH_WHEEL}"; fi && \
-    python3 -m pip install --no-cache-dir "ultralytics>=8.4.120,<8.5" ncnn
+    python3 -m pip install --no-cache-dir "ultralytics>=8.4.120,<8.5" ncnn "opencv-python>=4.6,<5"
+
+# On aarch64 the libgomp bundled with the torch and ncnn wheels needs static TLS, which is used up
+# once OpenCV / cv_bridge are loaded: the detector dies with "libgomp-....so: cannot allocate
+# memory in static TLS block". Preloading them at process start avoids it. Scoped to the detector
+# node only (detector.launch launch-prefix="$(optenv NIDAR_DETECTOR_PREFIX)"); a package without
+# a bundled libgomp (e.g. NVIDIA's torch wheel) falls back to the system libgomp.
+RUN d=/usr/local/lib/nidar_preload && mkdir -p "$d" && \
+    sys=$(ldconfig -p | awk '/libgomp\.so\.1 /{print $NF; exit}') && \
+    for pkg in torch ncnn; do \
+        f=$(ls /usr/local/lib/python3*/dist-packages/$pkg.libs/libgomp-*.so* 2>/dev/null | head -1); \
+        ln -sf "${f:-$sys}" "$d/libgomp_$pkg.so"; \
+    done && ls -l "$d"
+ENV NIDAR_DETECTOR_PREFIX="env LD_PRELOAD=/usr/local/lib/nidar_preload/libgomp_torch.so:/usr/local/lib/nidar_preload/libgomp_ncnn.so"
 
 ############################################################
 # Developer user (same uid as the host user so files in the mounted repo stay theirs)

@@ -1,0 +1,65 @@
+############################################################
+# NIDAR AirMouse — ONBOARD image for the Raspberry Pi 4 (arm64), ready to run
+#
+#   = the onboard base image: docker/Dockerfile.jetson built for linux/arm64 (ROS Noetic, MAVROS,
+#     Livox-SDK + livox_ros_driver2, ultralytics + NCNN for the detector; nothing Jetson-specific
+#     with its default base image)
+#   + the NIDAR catkin workspace COMPILED into /opt/nidar_ws, so the Pi never compiles anything.
+#
+# Built on the dev PC (x86) under QEMU and shipped to the Pi as a file or over ssh:
+#     scripts/pi4_onboard.sh image          # base + this image -> nidar-onboard-pi4
+#     scripts/pi4_onboard.sh deploy pi@<ip> # docker save | ssh | docker load
+# See hardware/PI4_DEPLOYMENT.md. Build context: the repository root
+# (Dockerfile.pi4.dockerignore sends only catkin_ws/src minus the simulation/GCS packages).
+#
+# At run time the repository on the Pi is bind-mounted over /home/developer/NIDAR (config, launch
+# files and Python nodes come from there; edit hardware.yaml, restart, done) and the entrypoint
+# points its catkin_ws/devel at /opt/nidar_ws/devel (the C++ built here). A C++ change therefore
+# needs a new image; a Python/launch/config change only needs a restart.
+############################################################
+ARG BASE_IMAGE=nidar-onboard-pi4-base
+FROM ${BASE_IMAGE}
+
+# make jobs (and packages) in parallel; each PCL-heavy compile under QEMU needs ~1-1.5 GB RAM.
+ARG JOBS=3
+ARG GIT_SHA=unknown
+ENV NIDAR_REPO=/home/developer/NIDAR NIDAR_WS=/opt/nidar_ws
+SHELL ["/bin/bash", "-c"]
+
+USER root
+RUN mkdir -p /opt/nidar_ws /home/developer/NIDAR/catkin_ws && \
+    chown -R developer:developer /opt/nidar_ws /home/developer/NIDAR
+USER developer
+
+COPY --chown=developer:developer catkin_ws/src /home/developer/NIDAR/catkin_ws/src
+
+# Same package set as the Jetson profile (scripts/jetson_onboard.sh build): no Gazebo, no GCS.
+# Build/devel/log spaces live outside the source tree so the bind mount of the Pi's repository
+# does not hide them.
+RUN source /opt/ros/noetic/setup.bash && cd /home/developer/NIDAR/catkin_ws && \
+    catkin config --profile pi4 --extend /opt/livox_ws/devel \
+        --skiplist velodyne_gazebo_plugins velodyne_simulator velodyne_description nidar_sim nidar_gcs \
+        --build-space /opt/nidar_ws/build --devel-space /opt/nidar_ws/devel \
+        --log-space /opt/nidar_ws/logs \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release > /dev/null && \
+    catkin build --profile pi4 -j${JOBS} -p${JOBS} --no-status --summarize && \
+    rm -rf /opt/nidar_ws/build /opt/nidar_ws/logs && \
+    echo "${GIT_SHA}" > /opt/nidar_ws/GIT_SHA
+
+COPY --chmod=755 <<'EOF' /usr/local/bin/nidar-pi4-entrypoint
+#!/bin/bash
+# Link the mounted repository's catkin_ws/devel to the workspace compiled into this image, so
+# hw_bringup.sh, verify_fix_parity.sh and ~/.bashrc find it where they always look.
+DEVEL="${NIDAR_REPO:-/home/developer/NIDAR}/catkin_ws/devel"
+if [ -L "$DEVEL" ] || [ ! -e "$DEVEL" ]; then
+    ln -sfn "$NIDAR_WS/devel" "$DEVEL" 2>/dev/null \
+        || echo "[nidar-pi4] cannot write $DEVEL (repository owned by another uid than $(id -u)?)" >&2
+else
+    echo "[nidar-pi4] $DEVEL is a real directory (built on this machine): using it, not the image's" >&2
+fi
+exec "$@"
+EOF
+
+WORKDIR /home/developer/NIDAR
+ENTRYPOINT ["/usr/local/bin/nidar-pi4-entrypoint"]
+CMD ["sleep", "infinity"]
