@@ -6,6 +6,7 @@
 #   scripts/jetson_onboard.sh start         create/start the persistent container nidar_onboard
 #   scripts/jetson_onboard.sh build         catkin build inside it (skips the simulation packages)
 #   scripts/jetson_onboard.sh bringup       start the flight stack (hw_bringup.sh) -- never arms
+#                                           (LIDAR=0 CAMERA=0 SKIP_PARITY=1 are passed through)
 #   scripts/jetson_onboard.sh stop          stop the flight stack (refuses while armed)
 #   scripts/jetson_onboard.sh shell         a shell in the container
 #
@@ -20,8 +21,11 @@ HW_CFG="$REPO_ROOT/catkin_ws/src/nidar_config/config/hardware.yaml"
 SKIP_PKGS="velodyne_gazebo_plugins velodyne_simulator velodyne_description nidar_sim nidar_gcs"
 
 hw() { python3 -c "import yaml; c=yaml.safe_load(open('$HW_CFG'))['hardware']; print($1)"; }
-in_container() {  # -it only with a terminal (systemd has none)
-    if [ -t 0 ]; then docker exec -it "$CONTAINER" bash -lc "$*"; else docker exec "$CONTAINER" bash -lc "$*"; fi
+in_container() {  # -it only with a terminal (systemd has none); forwards hw_bringup.sh's switches
+    local args=()
+    [ -t 0 ] && args+=(-it)
+    for v in LIDAR CAMERA SKIP_PARITY; do [ -n "${!v:-}" ] && args+=(-e "$v=${!v}"); done
+    docker exec "${args[@]}" "$CONTAINER" bash -lc "$*"
 }
 
 case "${1:-}" in
@@ -82,5 +86,5 @@ shell)
     in_container "cd $IN_REPO && exec bash"
     ;;
 *)
-    sed -n '2,13p' "$0"; exit 1 ;;
+    sed -n '2,14p' "$0"; exit 1 ;;
 esac

@@ -128,6 +128,7 @@ advertise `jetson_ip`). `scripts/jetson_onboard.sh check` verifies all of this.
 ```bash
 git clone --recurse-submodules https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
 cd ASTRA_AIR_MOUSE_
+git checkout hardware_deployment_test    # until the hardware PR is merged
 scripts/jetson_onboard.sh check      # JetPack, docker, serial devices, cameras, IPs, LiDAR ping
 scripts/jetson_onboard.sh image      # docker/Dockerfile.jetson -> image nidar-onboard (~30-60 min)
 scripts/jetson_onboard.sh start      # persistent container nidar_onboard (--net=host --privileged, /dev)
