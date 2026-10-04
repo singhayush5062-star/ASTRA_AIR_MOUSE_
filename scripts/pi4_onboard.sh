@@ -31,7 +31,10 @@ HW_CFG="$REPO_ROOT/catkin_ws/src/nidar_config/config/hardware.yaml"
 say()  { echo "[pi4_onboard] $*"; }
 warn() { echo "  !! $*"; }
 die()  { echo "[pi4_onboard] ERROR: $*" >&2; exit 1; }
-hw()   { python3 -c "import yaml; c=yaml.safe_load(open('$HW_CFG'))['hardware']; print($1)"; }
+hw()   {
+    python3 -c "import yaml" 2> /dev/null || die "python3-yaml missing: sudo apt install -y python3-yaml"
+    python3 -c "import yaml; c=yaml.safe_load(open('$HW_CFG'))['hardware']; print($1)"
+}
 on_pi() { [ "$(uname -m)" = "aarch64" ]; }
 in_container() {  # -it only with a terminal (systemd has none); forwards hw_bringup.sh's switches
     local args=()

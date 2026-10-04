@@ -24,24 +24,37 @@ checklist in [`README.md`](README.md)) is still there.
 
 ## 0. Quick start
 
+Do the steps **in this order**. The PC can run step A (2–4 h) while you do steps B–C on the Pi.
+
 ```bash
-# ── on the DEV PC (x86, Docker) ─────────────────────────────── once per code change ──
+# ── A. DEV PC (x86, Docker): build the image ──────────────────── once per C++ change ──
 git clone -b pi4_deployment https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
 cd ASTRA_AIR_MOUSE_
 scripts/pi4_onboard.sh image                 # 2-4 h the first time (ARM emulation)
-scripts/pi4_onboard.sh deploy pi@<pi-ip>     # copies the image to the Pi over ssh
 
-# ── on the PI 4 (64-bit OS, Docker installed) ────────────────────────────── once ──
+# ── B. PI 4: prepare the host (64-bit OS flashed, ssh working, §3.1) ──────────── once ──
+sudo apt update && sudo apt install -y git python3-yaml curl
+curl -fsSL https://get.docker.com | sh       # Docker for arm64
 git clone -b pi4_deployment https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
 cd ASTRA_AIR_MOUSE_
-scripts/pi4_onboard.sh setup && sudo reboot  # UART, groups, eth0 addresses
-scripts/pi4_onboard.sh check                 # every line without "!!" = OK
-scripts/pi4_onboard.sh start                 # container nidar_onboard
+scripts/pi4_onboard.sh setup                 # UART, docker/dialout groups, eth0 addresses (over Wi-Fi!)
+sudo reboot                                  # needed: UART overlay + group membership
 
-# ── every flight session (drone on the launch pad, nose toward the arena door) ──
-scripts/pi4_onboard.sh bringup               # brings the stack up, prints READY; never arms
+# ── C. DEV PC: copy the image to the Pi (after B: needs Docker + the docker group there) ──
+scripts/pi4_onboard.sh deploy <user>@<pi-ip> # e.g. pi@192.168.x.y (its Wi-Fi address)
+
+# ── D. PI 4: start and verify ────────────────────────────────────────────────── once ──
+cd ~/ASTRA_AIR_MOUSE_
+docker images | grep nidar-onboard-pi4       # the image arrived
+scripts/pi4_onboard.sh check                 # fix every line marked "!!"
+scripts/pi4_onboard.sh start                 # container nidar_onboard (restarts with Docker)
+
+# ── E. every flight session (drone on the launch pad, nose toward the arena door) ──
+scripts/pi4_onboard.sh bringup               # bench first: LIDAR=0 CAMERA=0 scripts/pi4_onboard.sh bringup
 # GCS laptop: scripts/gcs_docker.sh start -> http://localhost:8000 -> HARDWARE -> CONNECT (UDP 14550)
 ```
+
+If a step prints an error, look it up in §10 (Troubleshooting).
 
 ---
 
@@ -103,6 +116,7 @@ build with `PI_UID=<uid> PI_GID=<gid> scripts/pi4_onboard.sh image`.
 ### 3.2 Docker and the repository
 
 ```bash
+sudo apt update && sudo apt install -y git python3-yaml curl   # tools the helper script needs
 curl -fsSL https://get.docker.com | sh          # Docker for arm64 (Ubuntu or Raspberry Pi OS)
 git clone -b pi4_deployment https://github.com/singhayush5062-star/ASTRA_AIR_MOUSE_.git
 cd ASTRA_AIR_MOUSE_
@@ -344,6 +358,8 @@ Move the onboard computer to a Pi 5 or a Jetson Orin Nano (same Docker approach,
 | GCS: ROS link waits forever | laptop firewall (all TCP ports from `192.168.144.0/24`); `hardware.yaml network.jetson_ip` is on eth0 (`check`) |
 | `catkin_ws not built` in bringup | container started from an old image, or `catkin_ws/devel` deleted (`git clean -x`): `scripts/pi4_onboard.sh rm && scripts/pi4_onboard.sh start` |
 | `cannot write .../catkin_ws/devel` | the repository on the Pi is not owned by uid 1000. Rebuild with `PI_UID`/`PI_GID` (§3.1) or `chown -R`. |
+| `python3-yaml missing` | `sudo apt install -y python3-yaml` |
+| `deploy`: `permission denied ... docker.sock` | `setup` not run yet on the Pi, or no reboot/re-login after it (docker group) |
 | `exec format error` | the image is x86, or the OS is 32-bit (`uname -m` must be `aarch64`) |
 | detector: `libgomp-....so: cannot allocate memory in static TLS block` | an ARM limit with torch/ncnn. `detector.launch` handles it (`$NIDAR_DETECTOR_PREFIX`, set in the image). When you run the detector or ultralytics by hand: `$NIDAR_DETECTOR_PREFIX python3 ...` |
 | detector: `KeyError: 16` in `cv_bridge` | pip OpenCV 5 in the image; the image pins `opencv-python<5`. Rebuild the image |
